@@ -1,2 +1,2 @@
-# workflows
+# workflowos
 workfowsOS-AI Governance framework
