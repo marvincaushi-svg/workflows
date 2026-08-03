@@ -15,7 +15,7 @@ from workflowos.core import (
     evaluate_case,
     load_document,
 )
-from workflowos.technical_review import evaluate_technical_review
+from workflowos.technical_review import create_remediation_work, evaluate_technical_review
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -164,6 +164,67 @@ class WorkflowOSMVPTests(unittest.TestCase):
 
         self.assertEqual(decision["decision"], "rejected")
         self.assertEqual(decision["non_compliant_controls"], ["single_line_diagram"])
+
+    def test_changes_required_creates_one_assignable_work_item(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        decision = evaluate_technical_review(review)
+        work = create_remediation_work(
+            decision,
+            "pilot-pv-001",
+            "technical_document_owner",
+            "2026-08-03T13:00:00Z",
+        )
+
+        self.assertEqual(work["status"], "open")
+        self.assertEqual(work["source_decision"], "changes_required")
+        self.assertEqual(len(work["deliverables"]), 9)
+        self.assertEqual(
+            {item["control_id"] for item in work["deliverables"]},
+            set(decision["missing_controls"]),
+        )
+        self.assertTrue(
+            all(item["status"] == "requested" for item in work["deliverables"])
+        )
+
+    def test_approved_review_does_not_create_remediation_work(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        for control in review["controls"]:
+            control["result"] = "verified"
+        decision = evaluate_technical_review(review)
+
+        with self.assertRaisesRegex(WorkflowError, "decision=changes_required"):
+            create_remediation_work(
+                decision,
+                "pilot-pv-001",
+                "technical_document_owner",
+                "2026-08-03T13:00:00Z",
+            )
+
+    def test_cli_creates_sanitized_technical_evidence_request(self):
+        run = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "workflowos.cli",
+                "request-technical-evidence",
+                "--review",
+                str(TECHNICAL_REVIEW_PATH),
+                "--case-id",
+                "pilot-pv-001",
+                "--recipient-role",
+                "technical_document_owner",
+                "--at",
+                "2026-08-03T13:00:00Z",
+            ],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        work = json.loads(run.stdout)
+        self.assertEqual(work["work_id"], "pilot-pv-001.technical-remediation.1")
+        self.assertNotIn("customer", json.dumps(work).lower())
 
 
 if __name__ == "__main__":

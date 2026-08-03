@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from .core import WorkflowError, _require_list, _require_mapping, _require_string
+from .core import (
+    CASE_ID_RE,
+    WorkflowError,
+    _require_list,
+    _require_mapping,
+    _require_string,
+    _require_timestamp,
+)
 
 
 REQUIRED_CONTROLS = (
@@ -19,6 +26,18 @@ REQUIRED_CONTROLS = (
     "commissioning_measurements",
 )
 VALID_RESULTS = {"verified", "missing", "non_compliant"}
+
+CONTROL_DELIVERABLES = {
+    "single_line_diagram": "Single-line AC/DC diagram",
+    "cable_sizing": "Cable sizing with sections, lengths and installation methods",
+    "ac_dc_protections": "Coordinated AC/DC protection, RCD and SPD schedule",
+    "earthing_bonding": "Earthing and equipotential bonding design",
+    "short_circuit_data": "Prospective short-circuit values and breaking-capacity check",
+    "maximum_dc_voltage": "Maximum DC voltage calculation at project minimum temperature",
+    "battery_installation": "Battery location and installation conditions",
+    "grid_operator_requirements": "Grid-operator approval and connection requirements",
+    "commissioning_measurements": "Final inspection and measurement record",
+}
 
 
 def evaluate_technical_review(document: dict[str, Any]) -> dict[str, Any]:
@@ -74,5 +93,51 @@ def evaluate_technical_review(document: dict[str, Any]) -> dict[str, Any]:
         "missing_controls": missing,
         "non_compliant_controls": non_compliant,
         "scope": "technical_document_review",
+        "professional_signoff_required": True,
+    }
+
+
+def create_remediation_work(
+    decision: dict[str, Any],
+    case_id: str,
+    recipient_role: str,
+    created_at: str,
+) -> dict[str, Any]:
+    """Turn missing controls into one assignable, evidence-gated work item."""
+
+    if not CASE_ID_RE.fullmatch(case_id):
+        raise WorkflowError("case_id must be a non-sensitive stable identifier")
+    recipient = _require_string(recipient_role, "recipient_role")
+    timestamp = _require_timestamp(created_at, "created_at")
+    if decision.get("decision") != "changes_required":
+        raise WorkflowError("Remediation work requires decision=changes_required")
+
+    missing = _require_list(decision.get("missing_controls"), "missing_controls")
+    if not missing:
+        raise WorkflowError("changes_required must include missing controls")
+    unknown = [control_id for control_id in missing if control_id not in CONTROL_DELIVERABLES]
+    if unknown:
+        raise WorkflowError(f"Unknown missing controls: {', '.join(unknown)}")
+    if len(set(missing)) != len(missing):
+        raise WorkflowError("missing_controls contains duplicates")
+
+    return {
+        "work_id": f"{case_id}.technical-remediation.1",
+        "case_id": case_id,
+        "type": "request_technical_evidence",
+        "status": "open",
+        "assigned_to_role": recipient,
+        "created_at": timestamp,
+        "source_decision": "changes_required",
+        "deliverables": [
+            {
+                "control_id": control_id,
+                "description": CONTROL_DELIVERABLES[control_id],
+                "acceptance": "content_verified",
+                "status": "requested",
+            }
+            for control_id in missing
+        ],
+        "completion_rule": "all_deliverables_content_verified",
         "professional_signoff_required": True,
     }

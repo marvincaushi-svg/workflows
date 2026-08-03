@@ -19,6 +19,8 @@ Non è ancora un gestionale completo e non dichiara un impianto tecnicamente o n
 
 Il controllo tecnico successivo è separato dalla completezza documentale. Nel pilota restituisce `changes_required`: il file denominato come dimensionamento è stato verificato come piano di copertura da 18,80 kWp e non contiene schema unifilare, dimensionamento dei cavi o protezioni. Restano richiesti nove controlli elettrici espliciti; nessuna loro assenza viene trasformata automaticamente in una non conformità o in un'approvazione.
 
+Una decisione `changes_required` può essere trasformata in un'unica attività operativa sanificata. L'attività elenca ogni documento o verifica richiesta, resta `open` finché tutti i deliverable non sono verificati nel contenuto e mantiene obbligatoria la firma del professionista autorizzato.
+
 ## Risultato del pilota
 
 La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. Dopo il controllo del contenuto dei sette PDF originali, il percorso restituisce `ready` per lo scope limitato `document_intake_only`. La verifica ha confermato:
@@ -44,6 +46,12 @@ python -m workflowos.cli run \
 
 python -m workflowos.cli verify-audit \
   --audit /tmp/workflowos-audit.jsonl
+
+python -m workflowos.cli request-technical-evidence \
+  --review examples/pilot/technical-review.sanitized.json \
+  --case-id pilot-pv-001 \
+  --recipient-role technical_document_owner \
+  --at 2026-08-03T13:00:00Z
 ```
 
 ## Test
