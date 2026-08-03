@@ -17,6 +17,8 @@ email di assegnazione
 
 Non è ancora un gestionale completo e non dichiara un impianto tecnicamente o normativamente approvato. Lo stato `ready` vale esclusivamente per lo scope `document_intake_only`.
 
+Il controllo tecnico successivo è separato dalla completezza documentale. Nel pilota restituisce `changes_required`: il file denominato come dimensionamento è stato verificato come piano di copertura da 18,80 kWp e non contiene schema unifilare, dimensionamento dei cavi o protezioni. Restano richiesti nove controlli elettrici espliciti; nessuna loro assenza viene trasformata automaticamente in una non conformità o in un'approvazione.
+
 ## Risultato del pilota
 
 La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. Dopo il controllo del contenuto dei sette PDF originali, il percorso restituisce `ready` per lo scope limitato `document_intake_only`. La verifica ha confermato:
@@ -76,6 +78,7 @@ Nuovi agenti, provider, adapter o moduli restano fuori dal MVP finché questo pe
 - `workflowos/`: motore deterministico e audit log.
 - `tests/`: test automatici unitari ed end-to-end.
 - `.github/workflows/test.yml`: verifica continua su GitHub.
+- `workflowos/technical_review.py`: decisione tecnica `approved`, `changes_required` o `rejected`, sempre soggetta alla firma del professionista autorizzato.
 
 ## Privacy
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "sanitized": true,
+  "document_intake_status": "ready",
+  "controls": [
+    {"id": "single_line_diagram", "result": "missing", "evidence": "No single-line AC/DC diagram was found in the reviewed package."},
+    {"id": "cable_sizing", "result": "missing", "evidence": "The file labelled as sizing is a roof plan; it has no cable sections, lengths or installation methods."},
+    {"id": "ac_dc_protections", "result": "missing", "evidence": "No coordinated AC/DC protection, RCD or SPD schedule was found."},
+    {"id": "earthing_bonding", "result": "missing", "evidence": "No earthing or equipotential bonding design was found."},
+    {"id": "short_circuit_data", "result": "missing", "evidence": "No prospective short-circuit values or breaking-capacity check was found."},
+    {"id": "maximum_dc_voltage", "result": "missing", "evidence": "No maximum DC voltage calculation at the project minimum temperature was found."},
+    {"id": "battery_installation", "result": "missing", "evidence": "Battery quantities are listed, but installation location and conditions were not verified."},
+    {"id": "grid_operator_requirements", "result": "missing", "evidence": "No applicable grid-operator approval or connection requirements were found."},
+    {"id": "commissioning_measurements", "result": "missing", "evidence": "No final inspection and measurement record was found."}
+  ]
+}

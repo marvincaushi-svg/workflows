@@ -15,11 +15,13 @@ from workflowos.core import (
     evaluate_case,
     load_document,
 )
+from workflowos.technical_review import evaluate_technical_review
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESS_PATH = ROOT / "process.schema.yaml"
 EMAIL_PATH = ROOT / "examples" / "pilot" / "assignment.email.sanitized.json"
+TECHNICAL_REVIEW_PATH = ROOT / "examples" / "pilot" / "technical-review.sanitized.json"
 
 
 class WorkflowOSMVPTests(unittest.TestCase):
@@ -138,6 +140,30 @@ class WorkflowOSMVPTests(unittest.TestCase):
             )
             self.assertEqual(verify.returncode, 0, verify.stderr)
             self.assertTrue(json.loads(verify.stdout)["valid"])
+
+    def test_pilot_technical_review_requires_changes(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        decision = evaluate_technical_review(review)
+
+        self.assertEqual(decision["decision"], "changes_required")
+        self.assertEqual(decision["verified_controls"], [])
+        self.assertEqual(len(decision["missing_controls"]), 9)
+        self.assertTrue(decision["professional_signoff_required"])
+
+    def test_missing_control_cannot_be_silently_omitted(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        review["controls"].pop()
+
+        with self.assertRaisesRegex(WorkflowError, "omits required controls"):
+            evaluate_technical_review(review)
+
+    def test_non_compliance_is_rejected_not_treated_as_missing(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        review["controls"][0]["result"] = "non_compliant"
+        decision = evaluate_technical_review(review)
+
+        self.assertEqual(decision["decision"], "rejected")
+        self.assertEqual(decision["non_compliant_controls"], ["single_line_diagram"])
 
 
 if __name__ == "__main__":
