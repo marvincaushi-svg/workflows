@@ -22,7 +22,7 @@ Non è ancora un gestionale completo e non dichiara un impianto tecnicamente o n
 
 Il controllo tecnico successivo è separato dalla presa in carico della commessa. Nel pilota restituisce `changes_required`: un file ricevuto da SB e denominato come dimensionamento è stato verificato come piano di copertura da 18,80 kWp. È un dato progettuale disponibile, non un dimensionamento prodotto da A&F e non trasferisce a SB la responsabilità di produrre TAG, IA, schema o dimensionamento. Restano richiesti dodici controlli tecnici espliciti; nessuna loro assenza viene trasformata automaticamente in una non conformità o in un'approvazione.
 
-Una decisione `changes_required` può essere trasformata in un'unica attività operativa sanificata. L'attività elenca ogni documento o verifica richiesta, resta `open` finché tutti i deliverable non sono verificati nel contenuto e mantiene obbligatoria la firma del professionista autorizzato.
+Una decisione `changes_required` viene trasformata in un piano operativo sanificato con flussi A&F per progettazione tecnica, coordinamento diretto con il gestore e verifiche finali. Quando TAG e IA sono accettati, A&F carica su Monday TAG, IA e schema; ogni caricamento produce una notifica idempotente. Soltanto quando tutti e tre i documenti sono verificati e presenti, WorkflowOS prepara l'email a SB con approvazione umana obbligatoria prima dell'invio. Vengono creati soltanto i flussi necessari e le dipendenze impediscono di anticipare le verifiche o la consegna. Nessun controllo tecnico genera automaticamente una richiesta a SB.
 
 ## Risultato del pilota
 
@@ -50,7 +50,7 @@ python -m workflowos.cli run \
 python -m workflowos.cli verify-audit \
   --audit /tmp/workflowos-audit.jsonl
 
-python -m workflowos.cli create-af-technical-work \
+python -m workflowos.cli create-af-work-plan \
   --review examples/pilot/technical-review.sanitized.json \
   --case-id pilot-pv-001 \
   --at 2026-08-03T13:00:00Z
@@ -76,7 +76,10 @@ I test coprono:
 
 - **SB Energetica** assegna la commessa e fornisce esclusivamente i dati progettuali già disponibili. Tali dati sono input facoltativi: la loro presenza, assenza o denominazione non rende SB responsabile dei documenti tecnici.
 - **A&F Elektro** produce TAG, IA, schema unifilare e dimensionamento, esegue le verifiche tecniche collegate e gestisce direttamente il gestore di rete.
-- Ogni attività generata da `changes_required` viene assegnata ad `af_elektro`; il destinatario non è selezionabile da CLI e non può essere spostato su SB.
+- Ogni flusso generato da `changes_required` viene assegnato ad `af_elektro`; il destinatario non è selezionabile da CLI e non può essere spostato su SB.
+- Il flusso del gestore indica `grid_operator` come controparte esterna e `af_elektro` come gestore diretto della relazione.
+- Dopo l'accettazione delle pratiche, A&F carica TAG, IA e schema su Monday; le notifiche di caricamento sbloccano la bozza email e SB riceve i documenti via email dopo l'approvazione umana.
+- Una richiesta a SB può nascere soltanto da un dato progettuale sorgente esplicitamente mancante, mai dall'assenza di TAG, IA, schema, dimensionamento o altri controlli tecnici.
 - `normalize_email_evidence`: acquisisce e normalizza soltanto le prove osservate; non le collega e non le completa.
 - `build_case_from_email`: collega le prove normalizzate al Case.
 - `evaluate_case`: applica soltanto il Blueprint e decide `blocked`/`ready`.
