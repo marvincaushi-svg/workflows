@@ -9,7 +9,7 @@ from typing import Sequence
 
 from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
 from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
-from .technical_review import create_remediation_work, evaluate_technical_review
+from .technical_review import create_remediation_plan, evaluate_technical_review
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -36,8 +36,9 @@ def _build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--audit", required=True, help="JSONL audit path")
 
     request_parser = subparsers.add_parser(
-        "create-af-technical-work",
-        help="Create A&F-owned technical production work from a sanitized review",
+        "create-af-work-plan",
+        aliases=["create-af-technical-work"],
+        help="Create ordered A&F-owned workstreams from a sanitized review",
     )
     request_parser.add_argument("--review", required=True, help="Technical review path")
     request_parser.add_argument("--case-id", required=True, help="Non-sensitive case identifier")
@@ -76,7 +77,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             review = load_document(args.review)
             decision = evaluate_technical_review(review)
-            result = create_remediation_work(decision, args.case_id, args.at)
+            result = create_remediation_plan(decision, args.case_id, args.at)
     except WorkflowError as exc:
         print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
         return 2
