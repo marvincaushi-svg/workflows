@@ -1,1 +1,16 @@
-ewogICJzY2hlbWFfdmVyc2lvbiI6ICIxLjAiLAogICJzYW5pdGl6ZWQiOiB0cnVlLAogICJkb2N1bWVudF9pbnRha2Vfc3RhdHVzIjogInJlYWR5IiwKICAiY29udHJvbHMiOiBbCiAgICB7ImlkIjogInNpbmdsZV9saW5lX2RpYWdyYW0iLCAicmVzdWx0IjogIm1pc3NpbmciLCAiZXZpZGVuY2UiOiAiTm8gc2luZ2xlLWxpbmUgQUMvREMgZGlhZ3JhbSB3YXMgZm91bmQgaW4gdGhlIHJldmlld2VkIHBhY2thZ2UuIn0sCiAgICB7ImlkIjogImNhYmxlX3NpemluZyIsICJyZXN1bHQiOiAibWlzc2luZyIsICJldmlkZW5jZSI6ICJUaGUgZmlsZSBsYWJlbGxlZCBhcyBzaXppbmcgaXMgYSByb29mIHBsYW47IGl0IGhhcyBubyBjYWJsZSBzZWN0aW9ucywgbGVuZ3RocyBvciBpbnN0YWxsYXRpb24gbWV0aG9kcy4ifSwKICAgIHsiaWQiOiAiYWNfZGNfcHJvdGVjdGlvbnMiLCAicmVzdWx0IjogIm1pc3NpbmciLCAiZXZpZGVuY2UiOiAiTm8gY29vcmRpbmF0ZWQgQUMvREMgcHJvdGVjdGlvbiwgUkNEIG9yIFNQRCBzY2hlZHVsZSB3YXMgZm91bmQuIn0sCiAgICB7ImlkIjogImVhcnRoaW5nX2JvbmRpbmciLCAicmVzdWx0IjogIm1pc3NpbmciLCAiZXZpZGVuY2UiOiAiTm8gZWFydGhpbmcgb3IgZXF1aXBvdGVudGlhbCBib25kaW5nIGRlc2lnbiB3YXMgZm91bmQuIn0sCiAgICB7ImlkIjogInNob3J0X2NpcmN1aXRfZGF0YSIsICJyZXN1bHQiOiAibWlzc2luZyIsICJldmlkZW5jZSI6ICJObyBwcm9zcGVjdGl2ZSBzaG9ydC1jaXJjdWl0IHZhbHVlcyBvciBicmVha2luZy1jYXBhY2l0eSBjaGVjayB3YXMgZm91bmQuIn0sCiAgICB7ImlkIjogIm1heGltdW1fZGNfdm9sdGFnZSIsICJyZXN1bHQiOiAibWlzc2luZyIsICJldmlkZW5jZSI6ICJObyBtYXhpbXVtIERDIHZvbHRhZ2UgY2FsY3VsYXRpb24gYXQgdGhlIHByb2plY3QgbWluaW11bSB0ZW1wZXJhdHVyZSB3YXMgZm91bmQuIn0sCiAgICB7ImlkIjogImJhdHRlcnlfaW5zdGFsbGF0aW9uIiwgInJlc3VsdCI6ICJtaXNzaW5nIiwgImV2aWRlbmNlIjogIkJhdHRlcnkgcXVhbnRpdGllcyBhcmUgbGlzdGVkLCBidXQgaW5zdGFsbGF0aW9uIGxvY2F0aW9uIGFuZCBjb25kaXRpb25zIHdlcmUgbm90IHZlcmlmaWVkLiJ9LAogICAgeyJpZCI6ICJncmlkX29wZXJhdG9yX3JlcXVpcmVtZW50cyIsICJyZXN1bHQiOiAibWlzc2luZyIsICJldmlkZW5jZSI6ICJObyBhcHBsaWNhYmxlIGdyaWQtb3BlcmF0b3IgYXBwcm92YWwgb3IgY29ubmVjdGlvbiByZXF1aXJlbWVudHMgd2VyZSBmb3VuZC4ifSwKICAgIHsiaWQiOiAiY29tbWlzc2lvbmluZ19tZWFzdXJlbWVudHMiLCAicmVzdWx0IjogIm1pc3NpbmciLCAiZXZpZGVuY2UiOiAiTm8gZmluYWwgaW5zcGVjdGlvbiBhbmQgbWVhc3VyZW1lbnQgcmVjb3JkIHdhcyBmb3VuZC4ifQogIF0KfQo=
+{
+  "schema_version": "1.0",
+  "sanitized": true,
+  "document_intake_status": "ready",
+  "controls": [
+    {"id": "single_line_diagram", "result": "missing", "evidence": "No single-line AC/DC diagram was found in the reviewed package."},
+    {"id": "cable_sizing", "result": "missing", "evidence": "The file labelled as sizing is a roof plan; it has no cable sections, lengths or installation methods."},
+    {"id": "ac_dc_protections", "result": "missing", "evidence": "No coordinated AC/DC protection, RCD or SPD schedule was found."},
+    {"id": "earthing_bonding", "result": "missing", "evidence": "No earthing or equipotential bonding design was found."},
+    {"id": "short_circuit_data", "result": "missing", "evidence": "No prospective short-circuit values or breaking-capacity check was found."},
+    {"id": "maximum_dc_voltage", "result": "missing", "evidence": "No maximum DC voltage calculation at the project minimum temperature was found."},
+    {"id": "battery_installation", "result": "missing", "evidence": "Battery quantities are listed, but installation location and conditions were not verified."},
+    {"id": "grid_operator_requirements", "result": "missing", "evidence": "No applicable grid-operator approval or connection requirements were found."},
+    {"id": "commissioning_measurements", "result": "missing", "evidence": "No final inspection and measurement record was found."}
+  ]
+}
