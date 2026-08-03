@@ -10,6 +10,7 @@ from workflowos.hostpoint_email import (
     EmailAttachment,
     HostpointSmtpConfig,
     HostpointSmtpSender,
+    check_hostpoint_connection,
 )
 
 
@@ -22,6 +23,7 @@ class FakeSmtp:
         self.message = None
         self.send_args = None
         self.refused = {}
+        self.noop_status = 250
 
     def __enter__(self):
         return self
@@ -36,6 +38,9 @@ class FakeSmtp:
         self.message = message
         self.send_args = (from_addr, to_addrs)
         return self.refused
+
+    def noop(self):
+        return self.noop_status, b"OK"
 
 
 class WorkflowOSHostpointEmailTests(unittest.TestCase):
@@ -115,6 +120,22 @@ class WorkflowOSHostpointEmailTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(WorkflowError, "username must be"):
             HostpointSmtpConfig.from_environment(wrong_sender)
+
+    def test_connection_check_authenticates_without_creating_email(self):
+        result = check_hostpoint_connection(
+            self.config,
+            smtp_factory=self.smtp_factory,
+        )
+
+        self.assertEqual(result["connection_status"], "authenticated")
+        self.assertEqual(result["email_sent"], "false")
+        self.assertEqual(len(self.connections), 1)
+        connection = self.connections[0]
+        self.assertEqual(
+            connection.login_args,
+            ("Marvin.Caushi@elektro-af.ch", "local-test-secret"),
+        )
+        self.assertIsNone(connection.message)
 
     def test_smtp_failure_does_not_return_false_delivery_confirmation(self):
         def failing_factory(host, port, **kwargs):

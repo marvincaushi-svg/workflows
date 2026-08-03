@@ -55,12 +55,18 @@ class HostpointSmtpConfig:
 
     @classmethod
     def from_environment(
-        cls, environ: Mapping[str, str] | None = None
+        cls,
+        environ: Mapping[str, str] | None = None,
+        *,
+        require_live_enabled: bool = True,
     ) -> HostpointSmtpConfig:
         """Load live credentials only after a separate explicit enable switch."""
 
         values = os.environ if environ is None else environ
-        if values.get("WORKFLOWOS_SMTP_LIVE_ENABLED", "").casefold() != "true":
+        if (
+            require_live_enabled
+            and values.get("WORKFLOWOS_SMTP_LIVE_ENABLED", "").casefold() != "true"
+        ):
             raise WorkflowError(
                 "Hostpoint SMTP requires WORKFLOWOS_SMTP_LIVE_ENABLED=true"
             )
@@ -83,6 +89,39 @@ class HostpointSmtpConfig:
             port=port,
             timeout_seconds=timeout,
         )
+
+
+def check_hostpoint_connection(
+    config: HostpointSmtpConfig,
+    *,
+    smtp_factory: SmtpFactory = smtplib.SMTP_SSL,
+) -> dict[str, str]:
+    """Authenticate and issue SMTP NOOP without creating or sending a message."""
+
+    try:
+        context = ssl.create_default_context()
+        with smtp_factory(
+            config.host,
+            config.port,
+            timeout=config.timeout_seconds,
+            context=context,
+        ) as smtp:
+            smtp.login(config.username, config.password)
+            status_code, _ = smtp.noop()
+    except (OSError, smtplib.SMTPException) as exc:
+        raise WorkflowError(
+            f"Hostpoint SMTP connection check failed: {type(exc).__name__}"
+        ) from exc
+    if status_code != 250:
+        raise WorkflowError(
+            f"Hostpoint SMTP connection check returned status {status_code}"
+        )
+    return {
+        "provider": "hostpoint_smtp",
+        "connection_status": "authenticated",
+        "sender_email": config.from_address,
+        "email_sent": "false",
+    }
 
 
 @dataclass(frozen=True)

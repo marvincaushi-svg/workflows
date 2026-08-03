@@ -40,6 +40,12 @@ WORKFLOWOS_SMTP_LIVE_ENABLED=false
 
 L'invio reale richiede tre autorizzazioni indipendenti: `mode=live`, `allow_external_email=true` e `WORKFLOWOS_SMTP_LIVE_ENABLED=true`. La sola configurazione SMTP non è quindi sufficiente ad attivare email esterne.
 
+La GitHub Action manuale `Hostpoint SMTP connection test` usa il secret `HOSTPOINT_SMTP_PASSWORD` per autenticarsi e inviare soltanto il comando SMTP `NOOP`. Non costruisce messaggi e non invia email. Lo stesso controllo può essere eseguito nel runtime configurato con:
+
+```bash
+python -m workflowos.cli check-hostpoint-smtp
+```
+
 ## Risultato del pilota
 
 La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. La commessa risulta `ready` per lo scope limitato `assignment_intake_only`; soltanto l'email di assegnazione è obbligatoria. Gli allegati e gli altri fatti progettuali sono registrati come dati disponibili forniti da SB e non come deliverable obbligatori di SB. La verifica degli allegati ha confermato:

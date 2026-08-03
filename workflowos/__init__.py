@@ -7,6 +7,7 @@ from .hostpoint_email import (
     EmailAttachment,
     HostpointSmtpConfig,
     HostpointSmtpSender,
+    check_hostpoint_connection,
 )
 from .technical_review import (
     configure_sb_document_handoff,
@@ -21,6 +22,7 @@ __all__ = [
     "WorkflowError",
     "build_audit_log",
     "build_case_from_email",
+    "check_hostpoint_connection",
     "configure_sb_document_handoff",
     "create_remediation_work",
     "create_remediation_plan",
