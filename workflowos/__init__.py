@@ -1,17 +1,1 @@
-"""WorkflowOS: evidence-driven workflow evaluation with verifiable audit logs."""
-
-from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
-from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
-
-__all__ = [
-    "WorkflowError",
-    "build_audit_log",
-    "build_case_from_email",
-    "evaluate_case",
-    "load_document",
-    "read_audit_log",
-    "verify_audit_log",
-    "write_audit_log",
-]
-
-__version__ = "0.1.0"
+IiIiV29ya2Zsb3dPUzogZXZpZGVuY2UtZHJpdmVuIHdvcmtmbG93IGV2YWx1YXRpb24gd2l0aCB2ZXJpZmlhYmxlIGF1ZGl0IGxvZ3MuIiIiCgpmcm9tIC5hdWRpdCBpbXBvcnQgYnVpbGRfYXVkaXRfbG9nLCByZWFkX2F1ZGl0X2xvZywgdmVyaWZ5X2F1ZGl0X2xvZywgd3JpdGVfYXVkaXRfbG9nCmZyb20gLmNvcmUgaW1wb3J0IFdvcmtmbG93RXJyb3IsIGJ1aWxkX2Nhc2VfZnJvbV9lbWFpbCwgZXZhbHVhdGVfY2FzZSwgbG9hZF9kb2N1bWVudApmcm9tIC50ZWNobmljYWxfcmV2aWV3IGltcG9ydCBldmFsdWF0ZV90ZWNobmljYWxfcmV2aWV3CgpfX2FsbF9fID0gWwogICAgIldvcmtmbG93RXJyb3IiLAogICAgImJ1aWxkX2F1ZGl0X2xvZyIsCiAgICAiYnVpbGRfY2FzZV9mcm9tX2VtYWlsIiwKICAgICJldmFsdWF0ZV9jYXNlIiwKICAgICJldmFsdWF0ZV90ZWNobmljYWxfcmV2aWV3IiwKICAgICJsb2FkX2RvY3VtZW50IiwKICAgICJyZWFkX2F1ZGl0X2xvZyIsCiAgICAidmVyaWZ5X2F1ZGl0X2xvZyIsCiAgICAid3JpdGVfYXVkaXRfbG9nIiwKXQoKX192ZXJzaW9uX18gPSAiMC4xLjAiCg==
