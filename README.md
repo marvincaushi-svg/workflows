@@ -19,13 +19,14 @@ Non è ancora un gestionale completo e non dichiara un impianto tecnicamente o n
 
 ## Risultato del pilota
 
-La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. Il percorso attuale restituisce correttamente `blocked`, perché dalle sole evidenze osservate non risultano verificati:
+La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. Dopo il controllo del contenuto dei sette PDF originali, il percorso restituisce `ready` per lo scope limitato `document_intake_only`. La verifica ha confermato:
 
-- layout architettonico finale firmato;
-- piano di copertura;
-- distinta materiali.
+- layout finale firmato e datato;
+- piano di copertura con 40 moduli e fermaneve;
+- distinta materiali di 21 posizioni;
+- due stringhe da 20 moduli, report di progetto, dimensionamento e relazione di montaggio.
 
-Questi elementi non vengono dedotti dai nomi ambigui degli allegati. Il test dimostra quindi il comportamento richiesto: nessun dato inventato e blocco esplicito quando le prove non bastano.
+I documenti originali non sono pubblicati. La fixture registra soltanto classificazioni sanificate basate sulla verifica del contenuto. I test dimostrano sia il passaggio `blocked → ready`, sia il blocco esplicito quando firma o contenuto non sono verificati.
 
 ## Esecuzione
 

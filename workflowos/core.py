@@ -205,16 +205,38 @@ def normalize_email_evidence(raw_email: dict[str, Any]) -> dict[str, Any]:
             raise WorkflowError(
                 f"attachments[{index}].classification is not supported: {classification}"
             )
+        artifact_types_value = attachment.get("artifact_types")
+        if artifact_types_value is None:
+            artifact_types = [
+                _require_string(
+                    attachment.get("artifact_type"),
+                    f"attachments[{index}].artifact_type",
+                )
+            ]
+        else:
+            artifact_types = [
+                _require_string(value, f"attachments[{index}].artifact_types[{type_index}]")
+                for type_index, value in enumerate(
+                    _require_list(
+                        artifact_types_value, f"attachments[{index}].artifact_types"
+                    )
+                )
+            ]
+            if not artifact_types:
+                raise WorkflowError(
+                    f"attachments[{index}].artifact_types must not be empty"
+                )
+            if len(set(artifact_types)) != len(artifact_types):
+                raise WorkflowError(
+                    f"attachments[{index}].artifact_types contains duplicates"
+                )
         attachments.append(
             {
                 "source_index": source_index,
                 "mime_type": _require_string(
                     attachment.get("mime_type"), f"attachments[{index}].mime_type"
                 ),
-                "artifact_type": _require_string(
-                    attachment.get("artifact_type"),
-                    f"attachments[{index}].artifact_type",
-                ),
+                "artifact_types": artifact_types,
                 "classification": classification,
             }
         )
@@ -283,21 +305,23 @@ def build_case_from_email(
         }
     ]
     for attachment in normalized["attachments"]:
-        artifacts.append(
-            {
-                "artifact_id": (
-                    f"{case_id}-attachment-{attachment['source_index']:03d}"
-                ),
-                "artifact_type": attachment["artifact_type"],
-                "status": "available",
-                "classification": attachment["classification"],
-                "source": {
-                    "artifact_id": email_artifact_id,
-                    "attachment_index": attachment["source_index"],
-                    "mime_type": attachment["mime_type"],
-                },
-            }
-        )
+        for type_index, artifact_type in enumerate(attachment["artifact_types"], start=1):
+            artifacts.append(
+                {
+                    "artifact_id": (
+                        f"{case_id}-attachment-{attachment['source_index']:03d}"
+                        f"-claim-{type_index:02d}"
+                    ),
+                    "artifact_type": artifact_type,
+                    "status": "available",
+                    "classification": attachment["classification"],
+                    "source": {
+                        "artifact_id": email_artifact_id,
+                        "attachment_index": attachment["source_index"],
+                        "mime_type": attachment["mime_type"],
+                    },
+                }
+            )
 
     facts = [
         {
