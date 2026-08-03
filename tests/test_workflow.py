@@ -16,10 +16,12 @@ from workflowos.core import (
     load_document,
 )
 from workflowos.technical_review import (
+    configure_sb_document_handoff,
     create_remediation_plan,
     create_remediation_work,
     evaluate_technical_review,
     record_monday_document_notification,
+    record_sb_email_delivery,
 )
 
 
@@ -36,6 +38,62 @@ class WorkflowOSMVPTests(unittest.TestCase):
 
     def build_pilot_case(self):
         return build_case_from_email(self.process, self.email, "pilot-pv-001")
+
+    def example_identity(self):
+        return {
+            "customer_name": "Cliente Esempio SA",
+            "installation_address": {
+                "street": "Via Esempio",
+                "house_number": "10",
+                "postal_code": "2540",
+                "city": "Città Esempio",
+            },
+            "project_reference": "SB-2026-001",
+            "owner_name": "Proprietario Esempio",
+            "parcel_number": "1001",
+            "pv_power_kwp": "18.80",
+            "grid_operator": "Gestore Esempio",
+        }
+
+    def configure_handoff(self, handoff, case_id="pilot-pv-001"):
+        return configure_sb_document_handoff(
+            handoff,
+            {
+                "source": "monday",
+                "case_id": case_id,
+                "identity": self.example_identity(),
+                "sb_email_recipient": {
+                    "name": "Referente SB",
+                    "email": "referente@example.invalid",
+                    "organization_role": "sb_energetica",
+                    "resolution_status": "verified",
+                },
+            },
+        )
+
+    def document_notification(
+        self,
+        document_type,
+        index,
+        *,
+        identity=None,
+        grid_operator_practices_accepted=False,
+    ):
+        return {
+            "sanitized": True,
+            "source": "monday",
+            "event_type": "document_uploaded",
+            "document_type": document_type,
+            "content_verified": True,
+            "latest_version": True,
+            "identity_extraction_verified": True,
+            "document_identity": identity or self.example_identity(),
+            "grid_operator_practices_accepted": (
+                grid_operator_practices_accepted
+            ),
+            "event_ref_sha256": f"{index:064x}",
+            "attachment_ref_sha256": f"{index + 100:064x}",
+        }
 
     def test_real_sanitized_email_reaches_ready_after_content_verification(self):
         case = self.build_pilot_case()
@@ -231,6 +289,7 @@ class WorkflowOSMVPTests(unittest.TestCase):
                 "manage_grid_operator_coordination",
                 "perform_commissioning_verification",
                 "publish_accepted_documentation_to_sb_monday",
+                "publish_completion_documentation_to_sb_monday",
             ],
         )
         self.assertEqual(
@@ -280,6 +339,7 @@ class WorkflowOSMVPTests(unittest.TestCase):
             for item in plan["work_items"]
             if item["type"] == "publish_accepted_documentation_to_sb_monday"
         )
+        handoff = self.configure_handoff(handoff)
         self.assertEqual(handoff["status"], "blocked")
         self.assertEqual(handoff["assigned_to_role"], "af_elektro")
         self.assertEqual(handoff["delivery_recipient_role"], "sb_energetica")
@@ -302,6 +362,7 @@ class WorkflowOSMVPTests(unittest.TestCase):
             for item in plan["work_items"]
             if item["type"] == "publish_accepted_documentation_to_sb_monday"
         )
+        handoff = self.configure_handoff(handoff)
 
         document_types = [
             "tag_grid_connection_application",
@@ -311,26 +372,28 @@ class WorkflowOSMVPTests(unittest.TestCase):
         for index, document_type in enumerate(document_types, start=1):
             handoff = record_monday_document_notification(
                 handoff,
-                {
-                    "sanitized": True,
-                    "source": "monday",
-                    "event_type": "document_uploaded",
-                    "document_type": document_type,
-                    "content_verified": True,
-                    "grid_operator_practices_accepted": index == 3,
-                    "event_ref_sha256": f"{index:064x}",
-                },
+                self.document_notification(
+                    document_type,
+                    index,
+                    grid_operator_practices_accepted=index == 3,
+                ),
             )
 
-        self.assertEqual(handoff["status"], "ready_for_email_approval")
-        self.assertEqual(handoff["email_delivery"]["status"], "draft_ready")
+        self.assertEqual(handoff["status"], "email_send_requested")
+        self.assertEqual(handoff["email_delivery"]["status"], "send_requested")
         self.assertEqual(handoff["email_delivery"]["recipient_role"], "sb_energetica")
         self.assertEqual(handoff["email_delivery"]["channel"], "email")
         self.assertEqual(
-            handoff["email_delivery"]["send_mode"], "human_approval_required"
+            handoff["email_delivery"]["send_mode"],
+            "automatic_after_document_validation",
         )
         self.assertEqual(
             handoff["email_delivery"]["attachment_document_types"], document_types
+        )
+        self.assertEqual(handoff["document_identity_check"]["status"], "verified")
+        self.assertIn(
+            "installation_address.postal_code",
+            handoff["document_identity_check"]["checked_fields"],
         )
 
     def test_monday_notification_is_idempotent_and_acceptance_gated(self):
@@ -345,15 +408,10 @@ class WorkflowOSMVPTests(unittest.TestCase):
             for item in plan["work_items"]
             if item["type"] == "publish_accepted_documentation_to_sb_monday"
         )
-        notification = {
-            "sanitized": True,
-            "source": "monday",
-            "event_type": "document_uploaded",
-            "document_type": "tag_grid_connection_application",
-            "content_verified": True,
-            "grid_operator_practices_accepted": False,
-            "event_ref_sha256": "1" * 64,
-        }
+        handoff = self.configure_handoff(handoff)
+        notification = self.document_notification(
+            "tag_grid_connection_application", 1
+        )
 
         once = record_monday_document_notification(handoff, notification)
         twice = record_monday_document_notification(once, notification)
@@ -364,6 +422,281 @@ class WorkflowOSMVPTests(unittest.TestCase):
         self.assertEqual(
             twice["email_delivery"]["status"], "waiting_for_documents"
         )
+
+    def test_client_or_address_mismatch_blocks_automatic_email(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        plan = create_remediation_plan(
+            evaluate_technical_review(review),
+            "pilot-pv-001",
+            "2026-08-03T13:00:00Z",
+        )
+        handoff = self.configure_handoff(
+            next(
+                item
+                for item in plan["work_items"]
+                if item["type"] == "publish_accepted_documentation_to_sb_monday"
+            )
+        )
+
+        for index, document_type in enumerate(
+            (
+                "tag_grid_connection_application",
+                "installation_notice_ia",
+                "single_line_diagram",
+            ),
+            start=1,
+        ):
+            identity = self.example_identity()
+            if document_type == "single_line_diagram":
+                identity["customer_name"] = "Altro Cliente SA"
+                identity["installation_address"]["house_number"] = "11"
+            handoff = record_monday_document_notification(
+                handoff,
+                self.document_notification(
+                    document_type,
+                    index,
+                    identity=identity,
+                    grid_operator_practices_accepted=index == 3,
+                ),
+            )
+
+        self.assertEqual(handoff["status"], "blocked_document_identity")
+        self.assertEqual(
+            handoff["email_delivery"]["status"],
+            "blocked_document_validation",
+        )
+        self.assertEqual(
+            set(handoff["document_identity_check"]["mismatched_fields"]),
+            {"customer_name", "installation_address.house_number"},
+        )
+
+    def test_all_comparable_technical_fields_are_checked(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        plan = create_remediation_plan(
+            evaluate_technical_review(review),
+            "pilot-pv-001",
+            "2026-08-03T13:00:00Z",
+        )
+        handoff = self.configure_handoff(
+            next(
+                item
+                for item in plan["work_items"]
+                if item["type"] == "publish_accepted_documentation_to_sb_monday"
+            )
+        )
+
+        for index, document_type in enumerate(
+            (
+                "tag_grid_connection_application",
+                "installation_notice_ia",
+                "single_line_diagram",
+            ),
+            start=1,
+        ):
+            identity = self.example_identity()
+            if document_type == "installation_notice_ia":
+                identity["pv_power_kwp"] = "19.20"
+            handoff = record_monday_document_notification(
+                handoff,
+                self.document_notification(
+                    document_type,
+                    index + 10,
+                    identity=identity,
+                    grid_operator_practices_accepted=index == 3,
+                ),
+            )
+
+        self.assertEqual(handoff["status"], "blocked_document_identity")
+        self.assertIn(
+            "pv_power_kwp",
+            handoff["document_identity_check"]["mismatched_fields"],
+        )
+
+    def test_missing_required_document_identity_blocks_email(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        plan = create_remediation_plan(
+            evaluate_technical_review(review),
+            "pilot-pv-001",
+            "2026-08-03T13:00:00Z",
+        )
+        handoff = self.configure_handoff(
+            next(
+                item
+                for item in plan["work_items"]
+                if item["type"] == "publish_accepted_documentation_to_sb_monday"
+            )
+        )
+
+        for index, document_type in enumerate(
+            (
+                "tag_grid_connection_application",
+                "installation_notice_ia",
+                "single_line_diagram",
+            ),
+            start=1,
+        ):
+            identity = self.example_identity()
+            if document_type == "installation_notice_ia":
+                del identity["installation_address"]["postal_code"]
+            handoff = record_monday_document_notification(
+                handoff,
+                self.document_notification(
+                    document_type,
+                    index + 20,
+                    identity=identity,
+                    grid_operator_practices_accepted=index == 3,
+                ),
+            )
+
+        self.assertEqual(handoff["status"], "blocked_document_identity")
+        self.assertIn(
+            "installation_notice_ia:installation_address.postal_code",
+            handoff["document_identity_check"]["missing_fields"],
+        )
+
+    def test_unverified_sb_recipient_blocks_automatic_handoff(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        plan = create_remediation_plan(
+            evaluate_technical_review(review),
+            "pilot-pv-001",
+            "2026-08-03T13:00:00Z",
+        )
+        handoff = next(
+            item
+            for item in plan["work_items"]
+            if item["type"] == "publish_accepted_documentation_to_sb_monday"
+        )
+        with self.assertRaisesRegex(WorkflowError, "recipient must be verified"):
+            configure_sb_document_handoff(
+                handoff,
+                {
+                    "source": "monday",
+                    "case_id": "pilot-pv-001",
+                    "identity": self.example_identity(),
+                    "sb_email_recipient": {
+                        "name": "Referente incerto",
+                        "email": "incerto@example.invalid",
+                        "organization_role": "sb_energetica",
+                        "resolution_status": "ambiguous",
+                    },
+                },
+            )
+
+    def test_email_delivery_confirmation_completes_handoff_idempotently(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        plan = create_remediation_plan(
+            evaluate_technical_review(review),
+            "pilot-pv-001",
+            "2026-08-03T13:00:00Z",
+        )
+        handoff = self.configure_handoff(
+            next(
+                item
+                for item in plan["work_items"]
+                if item["type"] == "publish_accepted_documentation_to_sb_monday"
+            )
+        )
+        for index, document_type in enumerate(
+            (
+                "tag_grid_connection_application",
+                "installation_notice_ia",
+                "single_line_diagram",
+            ),
+            start=1,
+        ):
+            handoff = record_monday_document_notification(
+                handoff,
+                self.document_notification(
+                    document_type,
+                    index + 30,
+                    grid_operator_practices_accepted=index == 3,
+                ),
+            )
+
+        confirmation = {
+            "source": "email_adapter",
+            "delivery_status": "sent",
+            "recipient_email": "referente@example.invalid",
+            "message_ref_sha256": "f" * 64,
+        }
+        sent = record_sb_email_delivery(handoff, confirmation)
+        repeated = record_sb_email_delivery(sent, confirmation)
+
+        self.assertEqual(sent, repeated)
+        self.assertEqual(sent["status"], "completed")
+        self.assertEqual(sent["email_delivery"]["status"], "sent")
+
+    def test_signed_rasi_sina_is_checked_and_sent_after_installation(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        plan = create_remediation_plan(
+            evaluate_technical_review(review),
+            "pilot-pv-001",
+            "2026-08-03T13:00:00Z",
+        )
+        handoff = self.configure_handoff(
+            next(
+                item
+                for item in plan["work_items"]
+                if item["type"]
+                == "publish_completion_documentation_to_sb_monday"
+            )
+        )
+        notification = {
+            "sanitized": True,
+            "source": "monday",
+            "event_type": "document_uploaded",
+            "document_type": "safety_report_rasi_sina",
+            "content_verified": True,
+            "latest_version": True,
+            "identity_extraction_verified": True,
+            "professional_signoff_verified": True,
+            "document_identity": self.example_identity(),
+            "installation_completed": True,
+            "event_ref_sha256": "d" * 64,
+            "attachment_ref_sha256": "e" * 64,
+        }
+
+        handoff = record_monday_document_notification(handoff, notification)
+
+        self.assertEqual(handoff["status"], "email_send_requested")
+        self.assertEqual(handoff["document_identity_check"]["status"], "verified")
+        self.assertEqual(
+            handoff["email_delivery"]["attachment_document_types"],
+            ["safety_report_rasi_sina"],
+        )
+
+    def test_unsigned_rasi_sina_never_requests_email_send(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        plan = create_remediation_plan(
+            evaluate_technical_review(review),
+            "pilot-pv-001",
+            "2026-08-03T13:00:00Z",
+        )
+        handoff = self.configure_handoff(
+            next(
+                item
+                for item in plan["work_items"]
+                if item["type"]
+                == "publish_completion_documentation_to_sb_monday"
+            )
+        )
+        notification = {
+            "sanitized": True,
+            "source": "monday",
+            "event_type": "document_uploaded",
+            "document_type": "safety_report_rasi_sina",
+            "content_verified": True,
+            "latest_version": True,
+            "identity_extraction_verified": True,
+            "professional_signoff_verified": False,
+            "document_identity": self.example_identity(),
+            "installation_completed": True,
+            "event_ref_sha256": "b" * 64,
+            "attachment_ref_sha256": "c" * 64,
+        }
+
+        with self.assertRaisesRegex(WorkflowError, "professional signoff"):
+            record_monday_document_notification(handoff, notification)
 
     def test_only_missing_workstreams_are_created(self):
         decision = {
@@ -434,8 +767,15 @@ class WorkflowOSMVPTests(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stderr)
         plan = json.loads(run.stdout)
         self.assertEqual(plan["plan_id"], "pilot-pv-001.technical-remediation.1")
-        self.assertEqual(len(plan["work_items"]), 4)
-        self.assertNotIn("customer", json.dumps(plan).lower())
+        self.assertEqual(len(plan["work_items"]), 5)
+        self.assertNotIn("cliente esempio", json.dumps(plan).lower())
+        self.assertTrue(
+            all(
+                item.get("case_context") is None
+                for item in plan["work_items"]
+                if "case_context" in item
+            )
+        )
 
 
 if __name__ == "__main__":
