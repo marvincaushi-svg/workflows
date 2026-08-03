@@ -1,0 +1,32 @@
+name: Hostpoint SMTP self-email test
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_send_to_self:
+        description: Type SEND-TO-SELF to send one email to the A&F mailbox
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  send-one-email-to-af-mailbox:
+    if: ${{ inputs.confirm_send_to_self == 'SEND-TO-SELF' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Send one fixed email from and to A&F
+        env:
+          WORKFLOWOS_SMTP_HOST: asmtp.mail.hostpoint.ch
+          WORKFLOWOS_SMTP_PORT: "587"
+          WORKFLOWOS_SMTP_USERNAME: Marvin.Caushi@elektro-af.ch
+          WORKFLOWOS_SMTP_PASSWORD: ${{ secrets.HOSTPOINT_SMTP_PASSWORD }}
+          WORKFLOWOS_SMTP_FROM: Marvin.Caushi@elektro-af.ch
+          WORKFLOWOS_SMTP_FROM_NAME: A&F Elektro GmbH
+          WORKFLOWOS_SMTP_LIVE_ENABLED: "true"
+        run: python -m workflowos.cli send-hostpoint-self-test

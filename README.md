@@ -26,6 +26,35 @@ Una decisione `changes_required` viene trasformata in un piano operativo sanific
 
 Dopo l'ultimazione dell'installazione viene applicato lo stesso controllo al RaSi/SiNa. Il documento è trattato come un unico rapporto di sicurezza nelle diverse denominazioni linguistiche: deve essere completo, nella versione più recente e firmato dal professionista autorizzato. Solo dopo la corrispondenza con la commessa Monday viene richiesto automaticamente l'invio a SB. Vengono creati soltanto i flussi necessari e le dipendenze impediscono di anticipare verifiche o consegne. Nessun controllo tecnico genera automaticamente una richiesta a SB.
 
+Il modulo `workflowos.automation` collega questi controlli agli eventi delle colonne file di Monday. L'associazione tra ID delle colonne e tipo di documento è configurabile e non contiene identificativi della bacheca nel repository pubblico. Il runtime parte in modalità `test`: costruisce la richiesta email completa ma non chiama mai l'adapter di invio. La modalità `live` richiede sia `mode=live` sia l'interruttore separato `allow_external_email=true`; senza entrambi l'invio viene rifiutato. Gli eventi duplicati, le colonne estranee e le commesse provenienti da una bacheca diversa non possono generare email.
+
+L'adapter `workflowos.hostpoint_email` collega il mittente aziendale A&F a Hostpoint tramite SMTP STARTTLS. Accetta esclusivamente `Marvin.Caushi@elektro-af.ch` come utente e mittente, verifica nuovamente l'hash SHA-256 di ogni allegato scaricato da Monday e registra la consegna soltanto dopo l'accettazione del server SMTP. Il provider è fissato a `asmtp.mail.hostpoint.ch:587`; la password viene letta dall'ambiente e non deve essere inserita nel repository.
+
+### Configurazione Hostpoint locale
+
+Copiare `.env.example` in `.env.local` e compilare la password fuori da Git. Prima del test controllato lasciare:
+
+```text
+WORKFLOWOS_SMTP_LIVE_ENABLED=false
+```
+
+L'invio reale richiede tre autorizzazioni indipendenti: `mode=live`, `allow_external_email=true` e `WORKFLOWOS_SMTP_LIVE_ENABLED=true`. La sola configurazione SMTP non è quindi sufficiente ad attivare email esterne.
+
+La GitHub Action manuale `Hostpoint SMTP connection test` usa il secret `HOSTPOINT_SMTP_PASSWORD` per autenticarsi e inviare soltanto il comando SMTP `NOOP`. Non costruisce messaggi e non invia email. Lo stesso controllo può essere eseguito nel runtime configurato con:
+
+```bash
+python -m workflowos.cli check-hostpoint-smtp
+```
+
+La GitHub Action manuale `Hostpoint SMTP self-email test` invia una sola email
+senza allegati da e verso `Marvin.Caushi@elektro-af.ch`. Il destinatario non è
+configurabile e il comando richiede `WORKFLOWOS_SMTP_LIVE_ENABLED=true` oltre al
+secret Hostpoint:
+
+```bash
+python -m workflowos.cli send-hostpoint-self-test
+```
+
 ## Risultato del pilota
 
 La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. La commessa risulta `ready` per lo scope limitato `assignment_intake_only`; soltanto l'email di assegnazione è obbligatoria. Gli allegati e gli altri fatti progettuali sono registrati come dati disponibili forniti da SB e non come deliverable obbligatori di SB. La verifica degli allegati ha confermato:
@@ -76,6 +105,9 @@ I test coprono:
 - blocco dell'email per cliente, indirizzo o dato tecnico discordante;
 - invio automatico idempotente dopo il controllo documentale;
 - invio del RaSi/SiNa firmato soltanto dopo l'ultimazione dell'impianto.
+- runtime Monday in modalità test senza invii esterni;
+- interruttore esplicito per l'email reale e blocco delle duplicazioni.
+- adapter SMTP Hostpoint con STARTTLS, verifica del mittente A&F e controllo hash degli allegati.
 
 ## Confini delle responsabilità
 
