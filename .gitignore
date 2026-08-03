@@ -6,6 +6,11 @@ dist/
 build/
 *.egg-info/
 
+# Segreti e configurazione locale: non devono entrare nel repository.
+.env
+.env.*
+!.env.example
+
 # Dati reali, email originali e documenti dei clienti non devono entrare nel repository.
 private/
 examples/private/

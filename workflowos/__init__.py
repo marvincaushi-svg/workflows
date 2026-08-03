@@ -1,5 +1,6 @@
 """WorkflowOS: evidence-driven workflow evaluation with verifiable audit logs."""
 
+from .automation import handle_monday_file_event, initialize_automation_state
 from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
 from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
 from .technical_review import (
@@ -20,6 +21,8 @@ __all__ = [
     "create_remediation_plan",
     "evaluate_case",
     "evaluate_technical_review",
+    "handle_monday_file_event",
+    "initialize_automation_state",
     "record_monday_document_notification",
     "record_sb_email_delivery",
     "load_document",

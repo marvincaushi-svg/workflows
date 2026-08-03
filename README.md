@@ -26,6 +26,8 @@ Una decisione `changes_required` viene trasformata in un piano operativo sanific
 
 Dopo l'ultimazione dell'installazione viene applicato lo stesso controllo al RaSi/SiNa. Il documento è trattato come un unico rapporto di sicurezza nelle diverse denominazioni linguistiche: deve essere completo, nella versione più recente e firmato dal professionista autorizzato. Solo dopo la corrispondenza con la commessa Monday viene richiesto automaticamente l'invio a SB. Vengono creati soltanto i flussi necessari e le dipendenze impediscono di anticipare verifiche o consegne. Nessun controllo tecnico genera automaticamente una richiesta a SB.
 
+Il modulo `workflowos.automation` collega questi controlli agli eventi delle colonne file di Monday. L'associazione tra ID delle colonne e tipo di documento è configurabile e non contiene identificativi della bacheca nel repository pubblico. Il runtime parte in modalità `test`: costruisce la richiesta email completa ma non chiama mai l'adapter di invio. La modalità `live` richiede sia `mode=live` sia l'interruttore separato `allow_external_email=true`; senza entrambi l'invio viene rifiutato. Gli eventi duplicati, le colonne estranee e le commesse provenienti da una bacheca diversa non possono generare email.
+
 ## Risultato del pilota
 
 La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. La commessa risulta `ready` per lo scope limitato `assignment_intake_only`; soltanto l'email di assegnazione è obbligatoria. Gli allegati e gli altri fatti progettuali sono registrati come dati disponibili forniti da SB e non come deliverable obbligatori di SB. La verifica degli allegati ha confermato:
@@ -76,6 +78,8 @@ I test coprono:
 - blocco dell'email per cliente, indirizzo o dato tecnico discordante;
 - invio automatico idempotente dopo il controllo documentale;
 - invio del RaSi/SiNa firmato soltanto dopo l'ultimazione dell'impianto.
+- runtime Monday in modalità test senza invii esterni;
+- interruttore esplicito per l'email reale e blocco delle duplicazioni.
 
 ## Confini delle responsabilità
 
