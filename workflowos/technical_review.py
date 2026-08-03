@@ -1,1 +1,78 @@
-IiIiRXZpZGVuY2UtZ2F0ZWQgdGVjaG5pY2FsIHJldmlldyBmb3IgYSBkb2N1bWVudC1yZWFkeSBlbGVjdHJpY2FsIGNhc2UuIiIiCgpmcm9tIF9fZnV0dXJlX18gaW1wb3J0IGFubm90YXRpb25zCgpmcm9tIHR5cGluZyBpbXBvcnQgQW55Cgpmcm9tIC5jb3JlIGltcG9ydCBXb3JrZmxvd0Vycm9yLCBfcmVxdWlyZV9saXN0LCBfcmVxdWlyZV9tYXBwaW5nLCBfcmVxdWlyZV9zdHJpbmcKCgpSRVFVSVJFRF9DT05UUk9MUyA9ICgKICAgICJzaW5nbGVfbGluZV9kaWFncmFtIiwKICAgICJjYWJsZV9zaXppbmciLAogICAgImFjX2RjX3Byb3RlY3Rpb25zIiwKICAgICJlYXJ0aGluZ19ib25kaW5nIiwKICAgICJzaG9ydF9jaXJjdWl0X2RhdGEiLAogICAgIm1heGltdW1fZGNfdm9sdGFnZSIsCiAgICAiYmF0dGVyeV9pbnN0YWxsYXRpb24iLAogICAgImdyaWRfb3BlcmF0b3JfcmVxdWlyZW1lbnRzIiwKICAgICJjb21taXNzaW9uaW5nX21lYXN1cmVtZW50cyIsCikKVkFMSURfUkVTVUxUUyA9IHsidmVyaWZpZWQiLCAibWlzc2luZyIsICJub25fY29tcGxpYW50In0KCgpkZWYgZXZhbHVhdGVfdGVjaG5pY2FsX3Jldmlldyhkb2N1bWVudDogZGljdFtzdHIsIEFueV0pIC0+IGRpY3Rbc3RyLCBBbnldOgogICAgIiIiUmV0dXJuIGFuIGF1ZGl0YWJsZSBkZWNpc2lvbiB3aXRob3V0IGluZmVycmluZyBtaXNzaW5nIGVsZWN0cmljYWwgZGF0YS4iIiIKCiAgICBfcmVxdWlyZV9zdHJpbmcoZG9jdW1lbnQuZ2V0KCJzY2hlbWFfdmVyc2lvbiIpLCAic2NoZW1hX3ZlcnNpb24iKQogICAgaWYgZG9jdW1lbnQuZ2V0KCJzYW5pdGl6ZWQiKSBpcyBub3QgVHJ1ZToKICAgICAgICByYWlzZSBXb3JrZmxvd0Vycm9yKCJQdWJsaWMgdGVjaG5pY2FsIHJldmlldyBpbnB1dCBtdXN0IGRlY2xhcmUgc2FuaXRpemVkPXRydWUiKQogICAgaWYgZG9jdW1lbnQuZ2V0KCJkb2N1bWVudF9pbnRha2Vfc3RhdHVzIikgIT0gInJlYWR5IjoKICAgICAgICByYWlzZSBXb3JrZmxvd0Vycm9yKCJUZWNobmljYWwgcmV2aWV3IHJlcXVpcmVzIGRvY3VtZW50X2ludGFrZV9zdGF0dXM9cmVhZHkiKQoKICAgIGNvbnRyb2xzID0gX3JlcXVpcmVfbGlzdChkb2N1bWVudC5nZXQoImNvbnRyb2xzIiksICJjb250cm9scyIpCiAgICBieV9pZDogZGljdFtzdHIsIGRpY3Rbc3RyLCBBbnldXSA9IHt9CiAgICBmb3IgaW5kZXgsIHZhbHVlIGluIGVudW1lcmF0ZShjb250cm9scyk6CiAgICAgICAgY29udHJvbCA9IF9yZXF1aXJlX21hcHBpbmcodmFsdWUsIGYiY29udHJvbHNbe2luZGV4fV0iKQogICAgICAgIGNvbnRyb2xfaWQgPSBfcmVxdWlyZV9zdHJpbmcoY29udHJvbC5nZXQoImlkIiksIGYiY29udHJvbHNbe2luZGV4fV0uaWQiKQogICAgICAgIGlmIGNvbnRyb2xfaWQgaW4gYnlfaWQ6CiAgICAgICAgICAgIHJhaXNlIFdvcmtmbG93RXJyb3IoZiJEdXBsaWNhdGUgdGVjaG5pY2FsIGNvbnRyb2w6IHtjb250cm9sX2lkfSIpCiAgICAgICAgcmVzdWx0ID0gX3JlcXVpcmVfc3RyaW5nKGNvbnRyb2wuZ2V0KCJyZXN1bHQiKSwgZiJjb250cm9sc1t7aW5kZXh9XS5yZXN1bHQiKQogICAgICAgIGlmIHJlc3VsdCBub3QgaW4gVkFMSURfUkVTVUxUUzoKICAgICAgICAgICAgcmFpc2UgV29ya2Zsb3dFcnJvcihmIlVuc3VwcG9ydGVkIHJlc3VsdCBmb3Ige2NvbnRyb2xfaWR9OiB7cmVzdWx0fSIpCiAgICAgICAgX3JlcXVpcmVfc3RyaW5nKGNvbnRyb2wuZ2V0KCJldmlkZW5jZSIpLCBmImNvbnRyb2xzW3tpbmRleH1dLmV2aWRlbmNlIikKICAgICAgICBieV9pZFtjb250cm9sX2lkXSA9IGNvbnRyb2wKCiAgICBhYnNlbnQgPSBbY29udHJvbF9pZCBmb3IgY29udHJvbF9pZCBpbiBSRVFVSVJFRF9DT05UUk9MUyBpZiBjb250cm9sX2lkIG5vdCBpbiBieV9pZF0KICAgIGlmIGFic2VudDoKICAgICAgICByYWlzZSBXb3JrZmxvd0Vycm9yKGYiVGVjaG5pY2FsIHJldmlldyBvbWl0cyByZXF1aXJlZCBjb250cm9sczogeycsICcuam9pbihhYnNlbnQpfSIpCgogICAgbm9uX2NvbXBsaWFudCA9IFsKICAgICAgICBjb250cm9sX2lkCiAgICAgICAgZm9yIGNvbnRyb2xfaWQgaW4gUkVRVUlSRURfQ09OVFJPTFMKICAgICAgICBpZiBieV9pZFtjb250cm9sX2lkXVsicmVzdWx0Il0gPT0gIm5vbl9jb21wbGlhbnQiCiAgICBdCiAgICBtaXNzaW5nID0gWwogICAgICAgIGNvbnRyb2xfaWQKICAgICAgICBmb3IgY29udHJvbF9pZCBpbiBSRVFVSVJFRF9DT05UUk9MUwogICAgICAgIGlmIGJ5X2lkW2NvbnRyb2xfaWRdWyJyZXN1bHQiXSA9PSAibWlzc2luZyIKICAgIF0KICAgIGlmIG5vbl9jb21wbGlhbnQ6CiAgICAgICAgZGVjaXNpb24gPSAicmVqZWN0ZWQiCiAgICBlbGlmIG1pc3Npbmc6CiAgICAgICAgZGVjaXNpb24gPSAiY2hhbmdlc19yZXF1aXJlZCIKICAgIGVsc2U6CiAgICAgICAgZGVjaXNpb24gPSAiYXBwcm92ZWQiCgogICAgcmV0dXJuIHsKICAgICAgICAiZGVjaXNpb24iOiBkZWNpc2lvbiwKICAgICAgICAidmVyaWZpZWRfY29udHJvbHMiOiBbCiAgICAgICAgICAgIGNvbnRyb2xfaWQKICAgICAgICAgICAgZm9yIGNvbnRyb2xfaWQgaW4gUkVRVUlSRURfQ09OVFJPTFMKICAgICAgICAgICAgaWYgYnlfaWRbY29udHJvbF9pZF1bInJlc3VsdCJdID09ICJ2ZXJpZmllZCIKICAgICAgICBdLAogICAgICAgICJtaXNzaW5nX2NvbnRyb2xzIjogbWlzc2luZywKICAgICAgICAibm9uX2NvbXBsaWFudF9jb250cm9scyI6IG5vbl9jb21wbGlhbnQsCiAgICAgICAgInNjb3BlIjogInRlY2huaWNhbF9kb2N1bWVudF9yZXZpZXciLAogICAgICAgICJwcm9mZXNzaW9uYWxfc2lnbm9mZl9yZXF1aXJlZCI6IFRydWUsCiAgICB9Cg==
+"""Evidence-gated technical review for a document-ready electrical case."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .core import WorkflowError, _require_list, _require_mapping, _require_string
+
+
+REQUIRED_CONTROLS = (
+    "single_line_diagram",
+    "cable_sizing",
+    "ac_dc_protections",
+    "earthing_bonding",
+    "short_circuit_data",
+    "maximum_dc_voltage",
+    "battery_installation",
+    "grid_operator_requirements",
+    "commissioning_measurements",
+)
+VALID_RESULTS = {"verified", "missing", "non_compliant"}
+
+
+def evaluate_technical_review(document: dict[str, Any]) -> dict[str, Any]:
+    """Return an auditable decision without inferring missing electrical data."""
+
+    _require_string(document.get("schema_version"), "schema_version")
+    if document.get("sanitized") is not True:
+        raise WorkflowError("Public technical review input must declare sanitized=true")
+    if document.get("document_intake_status") != "ready":
+        raise WorkflowError("Technical review requires document_intake_status=ready")
+
+    controls = _require_list(document.get("controls"), "controls")
+    by_id: dict[str, dict[str, Any]] = {}
+    for index, value in enumerate(controls):
+        control = _require_mapping(value, f"controls[{index}]")
+        control_id = _require_string(control.get("id"), f"controls[{index}].id")
+        if control_id in by_id:
+            raise WorkflowError(f"Duplicate technical control: {control_id}")
+        result = _require_string(control.get("result"), f"controls[{index}].result")
+        if result not in VALID_RESULTS:
+            raise WorkflowError(f"Unsupported result for {control_id}: {result}")
+        _require_string(control.get("evidence"), f"controls[{index}].evidence")
+        by_id[control_id] = control
+
+    absent = [control_id for control_id in REQUIRED_CONTROLS if control_id not in by_id]
+    if absent:
+        raise WorkflowError(f"Technical review omits required controls: {', '.join(absent)}")
+
+    non_compliant = [
+        control_id
+        for control_id in REQUIRED_CONTROLS
+        if by_id[control_id]["result"] == "non_compliant"
+    ]
+    missing = [
+        control_id
+        for control_id in REQUIRED_CONTROLS
+        if by_id[control_id]["result"] == "missing"
+    ]
+    if non_compliant:
+        decision = "rejected"
+    elif missing:
+        decision = "changes_required"
+    else:
+        decision = "approved"
+
+    return {
+        "decision": decision,
+        "verified_controls": [
+            control_id
+            for control_id in REQUIRED_CONTROLS
+            if by_id[control_id]["result"] == "verified"
+        ],
+        "missing_controls": missing,
+        "non_compliant_controls": non_compliant,
+        "scope": "technical_document_review",
+        "professional_signoff_required": True,
+    }
