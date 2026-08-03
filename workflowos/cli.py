@@ -9,7 +9,11 @@ from typing import Sequence
 
 from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
 from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
-from .hostpoint_email import HostpointSmtpConfig, check_hostpoint_connection
+from .hostpoint_email import (
+    HostpointSmtpConfig,
+    check_hostpoint_connection,
+    send_hostpoint_self_test,
+)
 from .technical_review import create_remediation_plan, evaluate_technical_review
 
 
@@ -50,6 +54,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "check-hostpoint-smtp",
         help="Authenticate to Hostpoint SMTP without sending an email",
     )
+    subparsers.add_parser(
+        "send-hostpoint-self-test",
+        help="Send one fixed test email from and to the A&F mailbox",
+    )
     return parser
 
 
@@ -84,6 +92,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 require_live_enabled=False
             )
             result = check_hostpoint_connection(config)
+        elif args.command == "send-hostpoint-self-test":
+            config = HostpointSmtpConfig.from_environment()
+            result = send_hostpoint_self_test(config)
         else:
             review = load_document(args.review)
             decision = evaluate_technical_review(review)

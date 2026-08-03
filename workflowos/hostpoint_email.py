@@ -124,6 +124,56 @@ def check_hostpoint_connection(
     }
 
 
+def send_hostpoint_self_test(
+    config: HostpointSmtpConfig,
+    *,
+    smtp_factory: SmtpFactory = smtplib.SMTP_SSL,
+) -> dict[str, str]:
+    """Send one fixed, attachment-free test from and to the A&F mailbox."""
+
+    message = EmailMessage()
+    message["From"] = formataddr((config.from_name, config.from_address))
+    message["To"] = AF_SMTP_ADDRESS
+    message["Subject"] = "Test WorkflowOS – collegamento email A&F"
+    message["Message-ID"] = make_msgid(domain="elektro-af.ch")
+    message["X-WorkflowOS-Test"] = "hostpoint-self-test"
+    message.set_content(
+        "Questa è una email di prova inviata da WorkflowOS tramite Hostpoint.\n\n"
+        "Mittente e destinatario: Marvin.Caushi@elektro-af.ch\n"
+        "Nessun documento cliente è stato allegato.\n"
+    )
+    message_ref = hashlib.sha256(message.as_bytes()).hexdigest()
+
+    try:
+        context = ssl.create_default_context()
+        with smtp_factory(
+            config.host,
+            config.port,
+            timeout=config.timeout_seconds,
+            context=context,
+        ) as smtp:
+            smtp.login(config.username, config.password)
+            refused = smtp.send_message(
+                message,
+                from_addr=config.from_address,
+                to_addrs=[AF_SMTP_ADDRESS],
+            )
+    except (OSError, smtplib.SMTPException) as exc:
+        raise WorkflowError(
+            f"Hostpoint SMTP self-test failed: {type(exc).__name__}"
+        ) from exc
+
+    if refused:
+        raise WorkflowError("Hostpoint SMTP refused the A&F self-test recipient")
+    return {
+        "provider": "hostpoint_smtp",
+        "delivery_status": "sent",
+        "sender_email": config.from_address,
+        "recipient_email": AF_SMTP_ADDRESS,
+        "message_ref_sha256": message_ref,
+    }
+
+
 @dataclass(frozen=True)
 class EmailAttachment:
     """Attachment bytes returned by the private Monday asset resolver."""

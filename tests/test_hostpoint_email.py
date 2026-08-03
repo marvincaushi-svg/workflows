@@ -11,6 +11,7 @@ from workflowos.hostpoint_email import (
     HostpointSmtpConfig,
     HostpointSmtpSender,
     check_hostpoint_connection,
+    send_hostpoint_self_test,
 )
 
 
@@ -151,6 +152,34 @@ class WorkflowOSHostpointEmailTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(WorkflowError, "SMTPConnectError"):
             sender(self.request)
+
+    def test_self_test_sends_only_to_af_mailbox_without_attachments(self):
+        confirmation = send_hostpoint_self_test(
+            self.config,
+            smtp_factory=self.smtp_factory,
+        )
+
+        self.assertEqual(len(self.connections), 1)
+        connection = self.connections[0]
+        self.assertEqual(
+            connection.send_args,
+            (AF_SMTP_ADDRESS, [AF_SMTP_ADDRESS]),
+        )
+        self.assertEqual(connection.message["To"], AF_SMTP_ADDRESS)
+        self.assertEqual(connection.message["X-WorkflowOS-Test"], "hostpoint-self-test")
+        self.assertEqual(list(connection.message.iter_attachments()), [])
+        self.assertEqual(confirmation["delivery_status"], "sent")
+        self.assertEqual(confirmation["recipient_email"], AF_SMTP_ADDRESS)
+
+    def test_self_test_failure_does_not_return_false_delivery_confirmation(self):
+        def failing_factory(host, port, **kwargs):
+            raise smtplib.SMTPConnectError(421, "test failure")
+
+        with self.assertRaisesRegex(WorkflowError, "SMTPConnectError"):
+            send_hostpoint_self_test(
+                self.config,
+                smtp_factory=failing_factory,
+            )
 
     def test_password_is_hidden_from_config_representation(self):
         self.assertNotIn("local-test-secret", repr(self.config))

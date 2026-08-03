@@ -46,6 +46,15 @@ La GitHub Action manuale `Hostpoint SMTP connection test` usa il secret `HOSTPOI
 python -m workflowos.cli check-hostpoint-smtp
 ```
 
+La GitHub Action manuale `Hostpoint SMTP self-email test` invia una sola email
+senza allegati da e verso `Marvin.Caushi@elektro-af.ch`. Il destinatario non è
+configurabile e il comando richiede `WORKFLOWOS_SMTP_LIVE_ENABLED=true` oltre al
+secret Hostpoint:
+
+```bash
+python -m workflowos.cli send-hostpoint-self-test
+```
+
 ## Risultato del pilota
 
 La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. La commessa risulta `ready` per lo scope limitato `assignment_intake_only`; soltanto l'email di assegnazione è obbligatoria. Gli allegati e gli altri fatti progettuali sono registrati come dati disponibili forniti da SB e non come deliverable obbligatori di SB. La verifica degli allegati ha confermato:
