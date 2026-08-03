@@ -9,6 +9,7 @@ from typing import Sequence
 
 from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
 from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
+from .technical_review import create_remediation_work, evaluate_technical_review
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -33,6 +34,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "verify-audit", help="Verify the audit log hash chain"
     )
     verify_parser.add_argument("--audit", required=True, help="JSONL audit path")
+
+    request_parser = subparsers.add_parser(
+        "request-technical-evidence",
+        help="Create remediation work from a sanitized technical review",
+    )
+    request_parser.add_argument("--review", required=True, help="Technical review path")
+    request_parser.add_argument("--case-id", required=True, help="Non-sensitive case identifier")
+    request_parser.add_argument(
+        "--recipient-role", required=True, help="Sanitized role responsible for the evidence"
+    )
+    request_parser.add_argument(
+        "--at", required=True, help="ISO-8601 creation timestamp with timezone"
+    )
     return parser
 
 
@@ -60,8 +74,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "run":
             result = _run(args)
-        else:
+        elif args.command == "verify-audit":
             result = verify_audit_log(read_audit_log(args.audit))
+        else:
+            review = load_document(args.review)
+            decision = evaluate_technical_review(review)
+            result = create_remediation_work(
+                decision, args.case_id, args.recipient_role, args.at
+            )
     except WorkflowError as exc:
         print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
         return 2
