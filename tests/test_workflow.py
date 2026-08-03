@@ -1,1 +1,170 @@
-ZnJvbSBfX2Z1dHVyZV9fIGltcG9ydCBhbm5vdGF0aW9ucwoKaW1wb3J0IGNvcHkKaW1wb3J0IGpzb24KaW1wb3J0IHN1YnByb2Nlc3MKaW1wb3J0IHN5cwppbXBvcnQgdGVtcGZpbGUKaW1wb3J0IHVuaXR0ZXN0CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKZnJvbSB3b3JrZmxvd29zLmF1ZGl0IGltcG9ydCBidWlsZF9hdWRpdF9sb2csIHZlcmlmeV9hdWRpdF9sb2cKZnJvbSB3b3JrZmxvd29zLmNvcmUgaW1wb3J0ICgKICAgIFdvcmtmbG93RXJyb3IsCiAgICBidWlsZF9jYXNlX2Zyb21fZW1haWwsCiAgICBldmFsdWF0ZV9jYXNlLAogICAgbG9hZF9kb2N1bWVudCwKKQpmcm9tIHdvcmtmbG93b3MudGVjaG5pY2FsX3JldmlldyBpbXBvcnQgZXZhbHVhdGVfdGVjaG5pY2FsX3JldmlldwoKClJPT1QgPSBQYXRoKF9fZmlsZV9fKS5yZXNvbHZlKCkucGFyZW50c1sxXQpQUk9DRVNTX1BBVEggPSBST09UIC8gInByb2Nlc3Muc2NoZW1hLnlhbWwiCkVNQUlMX1BBVEggPSBST09UIC8gImV4YW1wbGVzIiAvICJwaWxvdCIgLyAiYXNzaWdubWVudC5lbWFpbC5zYW5pdGl6ZWQuanNvbiIKVEVDSE5JQ0FMX1JFVklFV19QQVRIID0gUk9PVCAvICJleGFtcGxlcyIgLyAicGlsb3QiIC8gInRlY2huaWNhbC1yZXZpZXcuc2FuaXRpemVkLmpzb24iCgoKY2xhc3MgV29ya2Zsb3dPU01WUFRlc3RzKHVuaXR0ZXN0LlRlc3RDYXNlKToKICAgIGRlZiBzZXRVcChzZWxmKSAtPiBOb25lOgogICAgICAgIHNlbGYucHJvY2VzcyA9IGxvYWRfZG9jdW1lbnQoUFJPQ0VTU19QQVRIKQogICAgICAgIHNlbGYuZW1haWwgPSBsb2FkX2RvY3VtZW50KEVNQUlMX1BBVEgpCgogICAgZGVmIGJ1aWxkX3BpbG90X2Nhc2Uoc2VsZik6CiAgICAgICAgcmV0dXJuIGJ1aWxkX2Nhc2VfZnJvbV9lbWFpbChzZWxmLnByb2Nlc3MsIHNlbGYuZW1haWwsICJwaWxvdC1wdi0wMDEiKQoKICAgIGRlZiB0ZXN0X3JlYWxfc2FuaXRpemVkX2VtYWlsX3JlYWNoZXNfcmVhZHlfYWZ0ZXJfY29udGVudF92ZXJpZmljYXRpb24oc2VsZik6CiAgICAgICAgY2FzZSA9IHNlbGYuYnVpbGRfcGlsb3RfY2FzZSgpCiAgICAgICAgZXZhbHVhdGlvbiA9IGV2YWx1YXRlX2Nhc2Uoc2VsZi5wcm9jZXNzLCBjYXNlKQoKICAgICAgICBzZWxmLmFzc2VydEVxdWFsKGV2YWx1YXRpb25bInN0YXR1cyJdLCAicmVhZHkiKQogICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwoZXZhbHVhdGlvblsibWlzc2luZ19hcnRpZmFjdHMiXSwgW10pCiAgICAgICAgc2VsZi5hc3NlcnRFcXVhbChldmFsdWF0aW9uWyJtaXNzaW5nX2ZhY3RzIl0sIFtdKQogICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwoZXZhbHVhdGlvblsicmVhZGluZXNzX3Njb3BlIl0sICJkb2N1bWVudF9pbnRha2Vfb25seSIpCgogICAgZGVmIHRlc3Rfbm9fdW5vYnNlcnZlZF9jdXN0b21lcl9maWVsZHNfYXJlX2ludmVudGVkKHNlbGYpOgogICAgICAgIGNhc2UgPSBzZWxmLmJ1aWxkX3BpbG90X2Nhc2UoKQogICAgICAgIHNlbGYuYXNzZXJ0Tm90SW4oImN1c3RvbWVyIiwgY2FzZSkKICAgICAgICBzZWxmLmFzc2VydE5vdEluKCJhZGRyZXNzIiwgY2FzZSkKICAgICAgICBzZWxmLmFzc2VydEVxdWFsKAogICAgICAgICAgICB7ZmFjdFsicGF0aCJdIGZvciBmYWN0IGluIGNhc2VbImZhY3RzIl19LCB7InJlcXVlc3RlZF9zdGFydF9kYXRlIn0KICAgICAgICApCiAgICAgICAgc2VyaWFsaXplZCA9IGpzb24uZHVtcHMoY2FzZSkubG93ZXIoKQogICAgICAgIHNlbGYuYXNzZXJ0Tm90SW4oImdsYWVzZXIiLCBzZXJpYWxpemVkKQogICAgICAgIHNlbGYuYXNzZXJ0Tm90SW4oImdsw6RzZXIiLCBzZXJpYWxpemVkKQoKICAgIGRlZiB0ZXN0X2luY29tcGxldGVfZXZpZGVuY2VfcGFja2FnZV9yZW1haW5zX2Jsb2NrZWQoc2VsZik6CiAgICAgICAgZW1haWwgPSBjb3B5LmRlZXBjb3B5KHNlbGYuZW1haWwpCiAgICAgICAgZW1haWxbImF0dGFjaG1lbnRzIl1bMV1bImNsYXNzaWZpY2F0aW9uIl0gPSAic2lnbmF0dXJlX25vdF92ZXJpZmllZCIKICAgICAgICBlbWFpbFsiYXR0YWNobWVudHMiXVs1XVsiY2xhc3NpZmljYXRpb24iXSA9ICJ1bnZlcmlmaWVkIgoKICAgICAgICBjYXNlID0gYnVpbGRfY2FzZV9mcm9tX2VtYWlsKHNlbGYucHJvY2VzcywgZW1haWwsICJwaWxvdC1wdi1ibG9ja2VkIikKICAgICAgICBldmFsdWF0aW9uID0gZXZhbHVhdGVfY2FzZShzZWxmLnByb2Nlc3MsIGNhc2UpCiAgICAgICAgc2VsZi5hc3NlcnRFcXVhbChldmFsdWF0aW9uWyJzdGF0dXMiXSwgImJsb2NrZWQiKQogICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwoCiAgICAgICAgICAgIGV2YWx1YXRpb25bIm1pc3NpbmdfYXJ0aWZhY3RzIl0sCiAgICAgICAgICAgIFsic2lnbmVkX2FyY2hpdGVjdHVyYWxfbGF5b3V0IiwgInJvb2ZpbmdfcGxhbiIsICJiaWxsX29mX21hdGVyaWFscyJdLAogICAgICAgICkKCiAgICBkZWYgdGVzdF91bnZlcmlmaWVkX2NsYXNzaWZpY2F0aW9uX25ldmVyX3NhdGlzZmllc19hX3JlcXVpcmVkX2FydGlmYWN0KHNlbGYpOgogICAgICAgIGVtYWlsID0gY29weS5kZWVwY29weShzZWxmLmVtYWlsKQogICAgICAgIGVtYWlsWyJhdHRhY2htZW50cyJdWzFdWyJjbGFzc2lmaWNhdGlvbiJdID0gInNpZ25hdHVyZV9ub3RfdmVyaWZpZWQiCgogICAgICAgIGNhc2UgPSBidWlsZF9jYXNlX2Zyb21fZW1haWwoc2VsZi5wcm9jZXNzLCBlbWFpbCwgInBpbG90LXB2LXVudmVyaWZpZWQiKQogICAgICAgIGV2YWx1YXRpb24gPSBldmFsdWF0ZV9jYXNlKHNlbGYucHJvY2VzcywgY2FzZSkKICAgICAgICBzZWxmLmFzc2VydEluKCJzaWduZWRfYXJjaGl0ZWN0dXJhbF9sYXlvdXQiLCBldmFsdWF0aW9uWyJtaXNzaW5nX2FydGlmYWN0cyJdKQogICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwoZXZhbHVhdGlvblsic3RhdHVzIl0sICJibG9ja2VkIikKCiAgICBkZWYgdGVzdF9ub25fZW1haWxfaW50YWtlX2lzX3JlamVjdGVkKHNlbGYpOgogICAgICAgIG5vdF9lbWFpbCA9IGNvcHkuZGVlcGNvcHkoc2VsZi5lbWFpbCkKICAgICAgICBub3RfZW1haWxbInNvdXJjZV90eXBlIl0gPSAiZm9ybSIKICAgICAgICB3aXRoIHNlbGYuYXNzZXJ0UmFpc2VzUmVnZXgoV29ya2Zsb3dFcnJvciwgInNvdXJjZV90eXBlIG11c3QgYmUgZW1haWwiKToKICAgICAgICAgICAgYnVpbGRfY2FzZV9mcm9tX2VtYWlsKHNlbGYucHJvY2Vzcywgbm90X2VtYWlsLCAicGlsb3QtcHYtMDAxIikKCiAgICBkZWYgdGVzdF9hdWRpdF9sb2dfZGV0ZWN0c190YW1wZXJpbmcoc2VsZik6CiAgICAgICAgY2FzZSA9IHNlbGYuYnVpbGRfcGlsb3RfY2FzZSgpCiAgICAgICAgZXZhbHVhdGlvbiA9IGV2YWx1YXRlX2Nhc2Uoc2VsZi5wcm9jZXNzLCBjYXNlKQogICAgICAgIGV2ZW50cyA9IGJ1aWxkX2F1ZGl0X2xvZyhjYXNlLCBldmFsdWF0aW9uLCAiMjAyNi0wOC0wM1QxMDowMDowMFoiKQoKICAgICAgICB2ZXJpZmljYXRpb24gPSB2ZXJpZnlfYXVkaXRfbG9nKGV2ZW50cykKICAgICAgICBzZWxmLmFzc2VydFRydWUodmVyaWZpY2F0aW9uWyJ2YWxpZCJdKQogICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwodmVyaWZpY2F0aW9uWyJldmVudF9jb3VudCJdLCA0KQoKICAgICAgICB0YW1wZXJlZCA9IGNvcHkuZGVlcGNvcHkoZXZlbnRzKQogICAgICAgIHRhbXBlcmVkWzJdWyJkYXRhIl1bInN0YXR1cyJdID0gImJsb2NrZWQiCiAgICAgICAgd2l0aCBzZWxmLmFzc2VydFJhaXNlc1JlZ2V4KFdvcmtmbG93RXJyb3IsICJBdWRpdCBoYXNoIG1pc21hdGNoIik6CiAgICAgICAgICAgIHZlcmlmeV9hdWRpdF9sb2codGFtcGVyZWQpCgogICAgZGVmIHRlc3RfY2xpX3J1bnNfZW5kX3RvX2VuZF9hbmRfdmVyaWZpZXNfd3JpdHRlbl9hdWRpdChzZWxmKToKICAgICAgICB3aXRoIHRlbXBmaWxlLlRlbXBvcmFyeURpcmVjdG9yeSgpIGFzIHRlbXBfZGlyOgogICAgICAgICAgICBhdWRpdF9wYXRoID0gUGF0aCh0ZW1wX2RpcikgLyAiYXVkaXQuanNvbmwiCiAgICAgICAgICAgIHJ1biA9IHN1YnByb2Nlc3MucnVuKAogICAgICAgICAgICAgICAgWwogICAgICAgICAgICAgICAgICAgIHN5cy5leGVjdXRhYmxlLAogICAgICAgICAgICAgICAgICAgICItbSIsCiAgICAgICAgICAgICAgICAgICAgIndvcmtmbG93b3MuY2xpIiwKICAgICAgICAgICAgICAgICAgICAicnVuIiwKICAgICAgICAgICAgICAgICAgICAiLS1wcm9jZXNzIiwKICAgICAgICAgICAgICAgICAgICBzdHIoUFJPQ0VTU19QQVRIKSwKICAgICAgICAgICAgICAgICAgICAiLS1lbWFpbCIsCiAgICAgICAgICAgICAgICAgICAgc3RyKEVNQUlMX1BBVEgpLAogICAgICAgICAgICAgICAgICAgICItLWNhc2UtaWQiLAogICAgICAgICAgICAgICAgICAgICJwaWxvdC1wdi0wMDEiLAogICAgICAgICAgICAgICAgICAgICItLWF1ZGl0IiwKICAgICAgICAgICAgICAgICAgICBzdHIoYXVkaXRfcGF0aCksCiAgICAgICAgICAgICAgICAgICAgIi0tYXQiLAogICAgICAgICAgICAgICAgICAgICIyMDI2LTA4LTAzVDEwOjAwOjAwWiIsCiAgICAgICAgICAgICAgICBdLAogICAgICAgICAgICAgICAgY3dkPVJPT1QsCiAgICAgICAgICAgICAgICBjaGVjaz1GYWxzZSwKICAgICAgICAgICAgICAgIGNhcHR1cmVfb3V0cHV0PVRydWUsCiAgICAgICAgICAgICAgICB0ZXh0PVRydWUsCiAgICAgICAgICAgICkKICAgICAgICAgICAgc2VsZi5hc3NlcnRFcXVhbChydW4ucmV0dXJuY29kZSwgMCwgcnVuLnN0ZGVycikKICAgICAgICAgICAgcGF5bG9hZCA9IGpzb24ubG9hZHMocnVuLnN0ZG91dCkKICAgICAgICAgICAgc2VsZi5hc3NlcnRFcXVhbChwYXlsb2FkWyJldmFsdWF0aW9uIl1bInN0YXR1cyJdLCAicmVhZHkiKQogICAgICAgICAgICBzZWxmLmFzc2VydFRydWUoYXVkaXRfcGF0aC5leGlzdHMoKSkKCiAgICAgICAgICAgIHZlcmlmeSA9IHN1YnByb2Nlc3MucnVuKAogICAgICAgICAgICAgICAgWwogICAgICAgICAgICAgICAgICAgIHN5cy5leGVjdXRhYmxlLAogICAgICAgICAgICAgICAgICAgICItbSIsCiAgICAgICAgICAgICAgICAgICAgIndvcmtmbG93b3MuY2xpIiwKICAgICAgICAgICAgICAgICAgICAidmVyaWZ5LWF1ZGl0IiwKICAgICAgICAgICAgICAgICAgICAiLS1hdWRpdCIsCiAgICAgICAgICAgICAgICAgICAgc3RyKGF1ZGl0X3BhdGgpLAogICAgICAgICAgICAgICAgXSwKICAgICAgICAgICAgICAgIGN3ZD1ST09ULAogICAgICAgICAgICAgICAgY2hlY2s9RmFsc2UsCiAgICAgICAgICAgICAgICBjYXB0dXJlX291dHB1dD1UcnVlLAogICAgICAgICAgICAgICAgdGV4dD1UcnVlLAogICAgICAgICAgICApCiAgICAgICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwodmVyaWZ5LnJldHVybmNvZGUsIDAsIHZlcmlmeS5zdGRlcnIpCiAgICAgICAgICAgIHNlbGYuYXNzZXJ0VHJ1ZShqc29uLmxvYWRzKHZlcmlmeS5zdGRvdXQpWyJ2YWxpZCJdKQoKICAgIGRlZiB0ZXN0X3BpbG90X3RlY2huaWNhbF9yZXZpZXdfcmVxdWlyZXNfY2hhbmdlcyhzZWxmKToKICAgICAgICByZXZpZXcgPSBsb2FkX2RvY3VtZW50KFRFQ0hOSUNBTF9SRVZJRVdfUEFUSCkKICAgICAgICBkZWNpc2lvbiA9IGV2YWx1YXRlX3RlY2huaWNhbF9yZXZpZXcocmV2aWV3KQoKICAgICAgICBzZWxmLmFzc2VydEVxdWFsKGRlY2lzaW9uWyJkZWNpc2lvbiJdLCAiY2hhbmdlc19yZXF1aXJlZCIpCiAgICAgICAgc2VsZi5hc3NlcnRFcXVhbChkZWNpc2lvblsidmVyaWZpZWRfY29udHJvbHMiXSwgW10pCiAgICAgICAgc2VsZi5hc3NlcnRFcXVhbChsZW4oZGVjaXNpb25bIm1pc3NpbmdfY29udHJvbHMiXSksIDkpCiAgICAgICAgc2VsZi5hc3NlcnRUcnVlKGRlY2lzaW9uWyJwcm9mZXNzaW9uYWxfc2lnbm9mZl9yZXF1aXJlZCJdKQoKICAgIGRlZiB0ZXN0X21pc3NpbmdfY29udHJvbF9jYW5ub3RfYmVfc2lsZW50bHlfb21pdHRlZChzZWxmKToKICAgICAgICByZXZpZXcgPSBsb2FkX2RvY3VtZW50KFRFQ0hOSUNBTF9SRVZJRVdfUEFUSCkKICAgICAgICByZXZpZXdbImNvbnRyb2xzIl0ucG9wKCkKCiAgICAgICAgd2l0aCBzZWxmLmFzc2VydFJhaXNlc1JlZ2V4KFdvcmtmbG93RXJyb3IsICJvbWl0cyByZXF1aXJlZCBjb250cm9scyIpOgogICAgICAgICAgICBldmFsdWF0ZV90ZWNobmljYWxfcmV2aWV3KHJldmlldykKCiAgICBkZWYgdGVzdF9ub25fY29tcGxpYW5jZV9pc19yZWplY3RlZF9ub3RfdHJlYXRlZF9hc19taXNzaW5nKHNlbGYpOgogICAgICAgIHJldmlldyA9IGxvYWRfZG9jdW1lbnQoVEVDSE5JQ0FMX1JFVklFV19QQVRIKQogICAgICAgIHJldmlld1siY29udHJvbHMiXVswXVsicmVzdWx0Il0gPSAibm9uX2NvbXBsaWFudCIKICAgICAgICBkZWNpc2lvbiA9IGV2YWx1YXRlX3RlY2huaWNhbF9yZXZpZXcocmV2aWV3KQoKICAgICAgICBzZWxmLmFzc2VydEVxdWFsKGRlY2lzaW9uWyJkZWNpc2lvbiJdLCAicmVqZWN0ZWQiKQogICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwoZGVjaXNpb25bIm5vbl9jb21wbGlhbnRfY29udHJvbHMiXSwgWyJzaW5nbGVfbGluZV9kaWFncmFtIl0pCgoKaWYgX19uYW1lX18gPT0gIl9fbWFpbl9fIjoKICAgIHVuaXR0ZXN0Lm1haW4oKQo=
+from __future__ import annotations
+
+import copy
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+from workflowos.audit import build_audit_log, verify_audit_log
+from workflowos.core import (
+    WorkflowError,
+    build_case_from_email,
+    evaluate_case,
+    load_document,
+)
+from workflowos.technical_review import evaluate_technical_review
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PROCESS_PATH = ROOT / "process.schema.yaml"
+EMAIL_PATH = ROOT / "examples" / "pilot" / "assignment.email.sanitized.json"
+TECHNICAL_REVIEW_PATH = ROOT / "examples" / "pilot" / "technical-review.sanitized.json"
+
+
+class WorkflowOSMVPTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.process = load_document(PROCESS_PATH)
+        self.email = load_document(EMAIL_PATH)
+
+    def build_pilot_case(self):
+        return build_case_from_email(self.process, self.email, "pilot-pv-001")
+
+    def test_real_sanitized_email_reaches_ready_after_content_verification(self):
+        case = self.build_pilot_case()
+        evaluation = evaluate_case(self.process, case)
+
+        self.assertEqual(evaluation["status"], "ready")
+        self.assertEqual(evaluation["missing_artifacts"], [])
+        self.assertEqual(evaluation["missing_facts"], [])
+        self.assertEqual(evaluation["readiness_scope"], "document_intake_only")
+
+    def test_no_unobserved_customer_fields_are_invented(self):
+        case = self.build_pilot_case()
+        self.assertNotIn("customer", case)
+        self.assertNotIn("address", case)
+        self.assertEqual(
+            {fact["path"] for fact in case["facts"]}, {"requested_start_date"}
+        )
+        serialized = json.dumps(case).lower()
+        self.assertNotIn("glaeser", serialized)
+        self.assertNotIn("gläser", serialized)
+
+    def test_incomplete_evidence_package_remains_blocked(self):
+        email = copy.deepcopy(self.email)
+        email["attachments"][1]["classification"] = "signature_not_verified"
+        email["attachments"][5]["classification"] = "unverified"
+
+        case = build_case_from_email(self.process, email, "pilot-pv-blocked")
+        evaluation = evaluate_case(self.process, case)
+        self.assertEqual(evaluation["status"], "blocked")
+        self.assertEqual(
+            evaluation["missing_artifacts"],
+            ["signed_architectural_layout", "roofing_plan", "bill_of_materials"],
+        )
+
+    def test_unverified_classification_never_satisfies_a_required_artifact(self):
+        email = copy.deepcopy(self.email)
+        email["attachments"][1]["classification"] = "signature_not_verified"
+
+        case = build_case_from_email(self.process, email, "pilot-pv-unverified")
+        evaluation = evaluate_case(self.process, case)
+        self.assertIn("signed_architectural_layout", evaluation["missing_artifacts"])
+        self.assertEqual(evaluation["status"], "blocked")
+
+    def test_non_email_intake_is_rejected(self):
+        not_email = copy.deepcopy(self.email)
+        not_email["source_type"] = "form"
+        with self.assertRaisesRegex(WorkflowError, "source_type must be email"):
+            build_case_from_email(self.process, not_email, "pilot-pv-001")
+
+    def test_audit_log_detects_tampering(self):
+        case = self.build_pilot_case()
+        evaluation = evaluate_case(self.process, case)
+        events = build_audit_log(case, evaluation, "2026-08-03T10:00:00Z")
+
+        verification = verify_audit_log(events)
+        self.assertTrue(verification["valid"])
+        self.assertEqual(verification["event_count"], 4)
+
+        tampered = copy.deepcopy(events)
+        tampered[2]["data"]["status"] = "blocked"
+        with self.assertRaisesRegex(WorkflowError, "Audit hash mismatch"):
+            verify_audit_log(tampered)
+
+    def test_cli_runs_end_to_end_and_verifies_written_audit(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audit_path = Path(temp_dir) / "audit.jsonl"
+            run = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "workflowos.cli",
+                    "run",
+                    "--process",
+                    str(PROCESS_PATH),
+                    "--email",
+                    str(EMAIL_PATH),
+                    "--case-id",
+                    "pilot-pv-001",
+                    "--audit",
+                    str(audit_path),
+                    "--at",
+                    "2026-08-03T10:00:00Z",
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+            payload = json.loads(run.stdout)
+            self.assertEqual(payload["evaluation"]["status"], "ready")
+            self.assertTrue(audit_path.exists())
+
+            verify = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "workflowos.cli",
+                    "verify-audit",
+                    "--audit",
+                    str(audit_path),
+                ],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(verify.returncode, 0, verify.stderr)
+            self.assertTrue(json.loads(verify.stdout)["valid"])
+
+    def test_pilot_technical_review_requires_changes(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        decision = evaluate_technical_review(review)
+
+        self.assertEqual(decision["decision"], "changes_required")
+        self.assertEqual(decision["verified_controls"], [])
+        self.assertEqual(len(decision["missing_controls"]), 9)
+        self.assertTrue(decision["professional_signoff_required"])
+
+    def test_missing_control_cannot_be_silently_omitted(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        review["controls"].pop()
+
+        with self.assertRaisesRegex(WorkflowError, "omits required controls"):
+            evaluate_technical_review(review)
+
+    def test_non_compliance_is_rejected_not_treated_as_missing(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        review["controls"][0]["result"] = "non_compliant"
+        decision = evaluate_technical_review(review)
+
+        self.assertEqual(decision["decision"], "rejected")
+        self.assertEqual(decision["non_compliant_controls"], ["single_line_diagram"])
+
+
+if __name__ == "__main__":
+    unittest.main()
