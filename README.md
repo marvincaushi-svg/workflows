@@ -28,7 +28,7 @@ Dopo l'ultimazione dell'installazione viene applicato lo stesso controllo al RaS
 
 Il modulo `workflowos.automation` collega questi controlli agli eventi delle colonne file di Monday. L'associazione tra ID delle colonne e tipo di documento è configurabile e non contiene identificativi della bacheca nel repository pubblico. Il runtime parte in modalità `test`: costruisce la richiesta email completa ma non chiama mai l'adapter di invio. La modalità `live` richiede sia `mode=live` sia l'interruttore separato `allow_external_email=true`; senza entrambi l'invio viene rifiutato. Gli eventi duplicati, le colonne estranee e le commesse provenienti da una bacheca diversa non possono generare email.
 
-L'adapter `workflowos.hostpoint_email` collega il mittente aziendale A&F a Hostpoint tramite SMTP SSL/TLS. Accetta esclusivamente `Marvin.Caushi@elektro-af.ch` come utente e mittente, verifica nuovamente l'hash SHA-256 di ogni allegato scaricato da Monday e registra la consegna soltanto dopo l'accettazione del server SMTP. Il provider è fissato a `asmtp.mail.hostpoint.ch:465`; la password viene letta dall'ambiente e non deve essere inserita nel repository.
+L'adapter `workflowos.hostpoint_email` collega il mittente aziendale A&F a Hostpoint tramite SMTP STARTTLS. Accetta esclusivamente `Marvin.Caushi@elektro-af.ch` come utente e mittente, verifica nuovamente l'hash SHA-256 di ogni allegato scaricato da Monday e registra la consegna soltanto dopo l'accettazione del server SMTP. Il provider è fissato a `asmtp.mail.hostpoint.ch:587`; la password viene letta dall'ambiente e non deve essere inserita nel repository.
 
 ### Configurazione Hostpoint locale
 
@@ -107,7 +107,7 @@ I test coprono:
 - invio del RaSi/SiNa firmato soltanto dopo l'ultimazione dell'impianto.
 - runtime Monday in modalità test senza invii esterni;
 - interruttore esplicito per l'email reale e blocco delle duplicazioni.
-- adapter SMTP Hostpoint con SSL, verifica del mittente A&F e controllo hash degli allegati.
+- adapter SMTP Hostpoint con STARTTLS, verifica del mittente A&F e controllo hash degli allegati.
 
 ## Confini delle responsabilità
 

@@ -25,6 +25,7 @@ class FakeSmtp:
         self.send_args = None
         self.refused = {}
         self.noop_status = 250
+        self.events = []
 
     def __enter__(self):
         return self
@@ -33,14 +34,26 @@ class FakeSmtp:
         return False
 
     def login(self, username, password):
+        self.events.append("login")
         self.login_args = (username, password)
 
+    def ehlo(self):
+        self.events.append("ehlo")
+        return 250, b"OK"
+
+    def starttls(self, *, context):
+        self.events.append("starttls")
+        self.tls_context = context
+        return 220, b"Ready to start TLS"
+
     def send_message(self, message, *, from_addr, to_addrs):
+        self.events.append("send_message")
         self.message = message
         self.send_args = (from_addr, to_addrs)
         return self.refused
 
     def noop(self):
+        self.events.append("noop")
         return self.noop_status, b"OK"
 
 
@@ -82,14 +95,19 @@ class WorkflowOSHostpointEmailTests(unittest.TestCase):
             smtp_factory=self.smtp_factory,
         )
 
-    def test_hostpoint_sender_uses_ssl_login_and_verified_attachment(self):
+    def test_hostpoint_sender_uses_starttls_login_and_verified_attachment(self):
         confirmation = self.sender()(self.request)
 
         self.assertEqual(len(self.connections), 1)
         connection = self.connections[0]
         self.assertEqual(connection.host, "asmtp.mail.hostpoint.ch")
-        self.assertEqual(connection.port, 465)
-        self.assertIsNotNone(connection.kwargs["context"])
+        self.assertEqual(connection.port, 587)
+        self.assertNotIn("context", connection.kwargs)
+        self.assertIsNotNone(connection.tls_context)
+        self.assertEqual(
+            connection.events,
+            ["ehlo", "starttls", "ehlo", "login", "send_message"],
+        )
         self.assertEqual(
             connection.login_args,
             ("Marvin.Caushi@elektro-af.ch", "local-test-secret"),
@@ -137,6 +155,10 @@ class WorkflowOSHostpointEmailTests(unittest.TestCase):
             ("Marvin.Caushi@elektro-af.ch", "local-test-secret"),
         )
         self.assertIsNone(connection.message)
+        self.assertEqual(
+            connection.events,
+            ["ehlo", "starttls", "ehlo", "login", "noop"],
+        )
 
     def test_smtp_failure_does_not_return_false_delivery_confirmation(self):
         def failing_factory(host, port, **kwargs):

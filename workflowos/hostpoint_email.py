@@ -16,7 +16,7 @@ from .core import SHA256_RE, WorkflowError, _require_string
 
 
 HOSTPOINT_SMTP_HOST = "asmtp.mail.hostpoint.ch"
-HOSTPOINT_SMTP_SSL_PORT = 465
+HOSTPOINT_SMTP_STARTTLS_PORT = 587
 AF_SMTP_ADDRESS = "marvin.caushi@elektro-af.ch"
 SUPPORTED_TEMPLATES = {"accepted_grid_documents", "signed_safety_report"}
 
@@ -30,14 +30,14 @@ class HostpointSmtpConfig:
     from_address: str = AF_SMTP_ADDRESS
     from_name: str = "A&F Elektro GmbH"
     host: str = HOSTPOINT_SMTP_HOST
-    port: int = HOSTPOINT_SMTP_SSL_PORT
+    port: int = HOSTPOINT_SMTP_STARTTLS_PORT
     timeout_seconds: float = 30.0
 
     def __post_init__(self) -> None:
         if self.host != HOSTPOINT_SMTP_HOST:
             raise WorkflowError("Hostpoint SMTP host must be asmtp.mail.hostpoint.ch")
-        if self.port != HOSTPOINT_SMTP_SSL_PORT:
-            raise WorkflowError("Hostpoint SMTP must use SSL/TLS on port 465")
+        if self.port != HOSTPOINT_SMTP_STARTTLS_PORT:
+            raise WorkflowError("Hostpoint SMTP must use STARTTLS on port 587")
         if self.username.casefold() != AF_SMTP_ADDRESS:
             raise WorkflowError(
                 "Hostpoint SMTP username must be Marvin.Caushi@elektro-af.ch"
@@ -71,7 +71,11 @@ class HostpointSmtpConfig:
                 "Hostpoint SMTP requires WORKFLOWOS_SMTP_LIVE_ENABLED=true"
             )
         try:
-            port = int(values.get("WORKFLOWOS_SMTP_PORT", str(HOSTPOINT_SMTP_SSL_PORT)))
+            port = int(
+                values.get(
+                    "WORKFLOWOS_SMTP_PORT", str(HOSTPOINT_SMTP_STARTTLS_PORT)
+                )
+            )
         except ValueError as exc:
             raise WorkflowError("WORKFLOWOS_SMTP_PORT must be an integer") from exc
         try:
@@ -94,7 +98,7 @@ class HostpointSmtpConfig:
 def check_hostpoint_connection(
     config: HostpointSmtpConfig,
     *,
-    smtp_factory: SmtpFactory = smtplib.SMTP_SSL,
+    smtp_factory: SmtpFactory = smtplib.SMTP,
 ) -> dict[str, str]:
     """Authenticate and issue SMTP NOOP without creating or sending a message."""
 
@@ -104,8 +108,8 @@ def check_hostpoint_connection(
             config.host,
             config.port,
             timeout=config.timeout_seconds,
-            context=context,
         ) as smtp:
+            _start_tls(smtp, context)
             smtp.login(config.username, config.password)
             status_code, _ = smtp.noop()
     except (OSError, smtplib.SMTPException) as exc:
@@ -127,7 +131,7 @@ def check_hostpoint_connection(
 def send_hostpoint_self_test(
     config: HostpointSmtpConfig,
     *,
-    smtp_factory: SmtpFactory = smtplib.SMTP_SSL,
+    smtp_factory: SmtpFactory = smtplib.SMTP,
 ) -> dict[str, str]:
     """Send one fixed, attachment-free test from and to the A&F mailbox."""
 
@@ -150,8 +154,8 @@ def send_hostpoint_self_test(
             config.host,
             config.port,
             timeout=config.timeout_seconds,
-            context=context,
         ) as smtp:
+            _start_tls(smtp, context)
             smtp.login(config.username, config.password)
             refused = smtp.send_message(
                 message,
@@ -198,6 +202,14 @@ AttachmentLoader = Callable[[str], EmailAttachment]
 SmtpFactory = Callable[..., Any]
 
 
+def _start_tls(smtp: Any, context: ssl.SSLContext) -> None:
+    """Upgrade a plain SMTP connection before sending credentials."""
+
+    smtp.ehlo()
+    smtp.starttls(context=context)
+    smtp.ehlo()
+
+
 class HostpointSmtpSender:
     """Callable email adapter compatible with handle_monday_file_event."""
 
@@ -206,7 +218,7 @@ class HostpointSmtpSender:
         config: HostpointSmtpConfig,
         attachment_loader: AttachmentLoader,
         *,
-        smtp_factory: SmtpFactory = smtplib.SMTP_SSL,
+        smtp_factory: SmtpFactory = smtplib.SMTP,
     ) -> None:
         self._config = config
         self._attachment_loader = attachment_loader
@@ -223,8 +235,8 @@ class HostpointSmtpSender:
                 self._config.host,
                 self._config.port,
                 timeout=self._config.timeout_seconds,
-                context=context,
             ) as smtp:
+                _start_tls(smtp, context)
                 smtp.login(self._config.username, self._config.password)
                 refused = smtp.send_message(
                     message,
