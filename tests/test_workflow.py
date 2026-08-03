@@ -30,19 +30,12 @@ class WorkflowOSMVPTests(unittest.TestCase):
     def build_pilot_case(self):
         return build_case_from_email(self.process, self.email, "pilot-pv-001")
 
-    def test_real_sanitized_email_reaches_a_verifiable_blocked_state(self):
+    def test_real_sanitized_email_reaches_ready_after_content_verification(self):
         case = self.build_pilot_case()
         evaluation = evaluate_case(self.process, case)
 
-        self.assertEqual(evaluation["status"], "blocked")
-        self.assertEqual(
-            evaluation["missing_artifacts"],
-            [
-                "signed_architectural_layout",
-                "roofing_plan",
-                "bill_of_materials",
-            ],
-        )
+        self.assertEqual(evaluation["status"], "ready")
+        self.assertEqual(evaluation["missing_artifacts"], [])
         self.assertEqual(evaluation["missing_facts"], [])
         self.assertEqual(evaluation["readiness_scope"], "document_intake_only")
 
@@ -57,32 +50,21 @@ class WorkflowOSMVPTests(unittest.TestCase):
         self.assertNotIn("glaeser", serialized)
         self.assertNotIn("gläser", serialized)
 
-    def test_complete_evidence_package_reaches_ready(self):
+    def test_incomplete_evidence_package_remains_blocked(self):
         email = copy.deepcopy(self.email)
-        email["attachments"][1]["artifact_type"] = "signed_architectural_layout"
-        email["attachments"][1]["classification"] = "content_verified"
-        email["attachments"][5]["artifact_type"] = "bill_of_materials"
-        email["attachments"][5]["classification"] = "content_verified"
-        email["attachments"].append(
-            {
-                "source_index": 8,
-                "mime_type": "application/pdf",
-                "artifact_type": "roofing_plan",
-                "classification": "content_verified",
-            }
-        )
+        email["attachments"][1]["classification"] = "signature_not_verified"
+        email["attachments"][5]["classification"] = "unverified"
 
-        case = build_case_from_email(self.process, email, "pilot-pv-ready")
+        case = build_case_from_email(self.process, email, "pilot-pv-blocked")
         evaluation = evaluate_case(self.process, case)
-        self.assertEqual(evaluation["status"], "ready")
-        self.assertEqual(evaluation["missing_artifacts"], [])
-        self.assertTrue(
-            all(decision["outcome"] == "pass" for decision in evaluation["decisions"])
+        self.assertEqual(evaluation["status"], "blocked")
+        self.assertEqual(
+            evaluation["missing_artifacts"],
+            ["signed_architectural_layout", "roofing_plan", "bill_of_materials"],
         )
 
     def test_unverified_classification_never_satisfies_a_required_artifact(self):
         email = copy.deepcopy(self.email)
-        email["attachments"][1]["artifact_type"] = "signed_architectural_layout"
         email["attachments"][1]["classification"] = "signature_not_verified"
 
         case = build_case_from_email(self.process, email, "pilot-pv-unverified")
@@ -106,7 +88,7 @@ class WorkflowOSMVPTests(unittest.TestCase):
         self.assertEqual(verification["event_count"], 4)
 
         tampered = copy.deepcopy(events)
-        tampered[2]["data"]["missing_artifacts"] = []
+        tampered[2]["data"]["status"] = "blocked"
         with self.assertRaisesRegex(WorkflowError, "Audit hash mismatch"):
             verify_audit_log(tampered)
 
@@ -137,7 +119,7 @@ class WorkflowOSMVPTests(unittest.TestCase):
             )
             self.assertEqual(run.returncode, 0, run.stderr)
             payload = json.loads(run.stdout)
-            self.assertEqual(payload["evaluation"]["status"], "blocked")
+            self.assertEqual(payload["evaluation"]["status"], "ready")
             self.assertTrue(audit_path.exists())
 
             verify = subprocess.run(
