@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "process": {
+    "id": "pv-pre-installation-document-intake-v1",
+    "name": "PV pre-installation document intake",
+    "readiness_scope": "document_intake_only",
+    "goal": {
+      "id": "pv-document-package-ready",
+      "description": "Determine whether the evidence package is ready for document review without inventing missing data."
+    },
+    "intake": {
+      "required_channel": "email"
+    },
+    "checklist": {
+      "required_artifacts": [
+        {
+          "id": "assignment-email",
+          "artifact_type": "assignment_email",
+          "description": "Assignment or request email"
+        },
+        {
+          "id": "optimizer-qr-map",
+          "artifact_type": "optimizer_qr_map",
+          "description": "Optimizer QR map"
+        },
+        {
+          "id": "signed-architectural-layout",
+          "artifact_type": "signed_architectural_layout",
+          "description": "Signed final architectural layout"
+        },
+        {
+          "id": "roofing-plan",
+          "artifact_type": "roofing_plan",
+          "description": "Roofing plan"
+        },
+        {
+          "id": "pv-design-report",
+          "artifact_type": "pv_design_report",
+          "description": "PV design report"
+        },
+        {
+          "id": "string-diagram",
+          "artifact_type": "string_diagram",
+          "description": "String diagram"
+        },
+        {
+          "id": "system-sizing",
+          "artifact_type": "system_sizing",
+          "description": "System sizing document"
+        },
+        {
+          "id": "mounting-report",
+          "artifact_type": "mounting_report",
+          "description": "Mounting system report"
+        },
+        {
+          "id": "bill-of-materials",
+          "artifact_type": "bill_of_materials",
+          "description": "Bill of materials"
+        }
+      ],
+      "required_facts": [
+        {
+          "path": "requested_start_date",
+          "description": "Requested or proposed start date"
+        }
+      ]
+    },
+    "states": {
+      "initial": "new",
+      "ready": "ready",
+      "blocked": "blocked"
+    }
+  }
+}

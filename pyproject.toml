@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workflowos"
+version = "0.1.0"
+description = "A small, verifiable governance engine for evidence-driven workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "WorkflowOS contributors" }]
+dependencies = []
+
+[project.scripts]
+workflowos = "workflowos.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["workflowos*"]

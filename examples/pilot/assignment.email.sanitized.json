@@ -1,0 +1,80 @@
+{
+  "schema_version": "1.0",
+  "source_type": "email",
+  "provider": "gmail",
+  "message_ref_sha256": "952967e39f2b447bf581fe3f8816240604255ec2f59ea0f28c5df9afc18f1248",
+  "received_at": "2026-07-06T07:11:11Z",
+  "source_party_ref": "source-party-001",
+  "sanitized": true,
+  "redacted_fields": [
+    "sender_identity",
+    "recipient_identity",
+    "subject",
+    "body",
+    "attachment_filenames",
+    "customer_identity",
+    "site_address"
+  ],
+  "observations": [
+    {
+      "path": "requested_start_date",
+      "value": "2026-07-13",
+      "source_locator": "email_body"
+    }
+  ],
+  "attachments": [
+    {
+      "source_index": 1,
+      "mime_type": "application/pdf",
+      "artifact_type": "optimizer_qr_map",
+      "classification": "confirmed_from_filename"
+    },
+    {
+      "source_index": 2,
+      "mime_type": "application/pdf",
+      "artifact_type": "architectural_layout",
+      "classification": "signature_not_verified"
+    },
+    {
+      "source_index": 3,
+      "mime_type": "application/pdf",
+      "artifact_type": "string_diagram",
+      "classification": "confirmed_from_filename"
+    },
+    {
+      "source_index": 4,
+      "mime_type": "application/pdf",
+      "artifact_type": "pv_design_report",
+      "classification": "confirmed_from_filename"
+    },
+    {
+      "source_index": 5,
+      "mime_type": "application/pdf",
+      "artifact_type": "system_sizing",
+      "classification": "confirmed_from_filename"
+    },
+    {
+      "source_index": 6,
+      "mime_type": "application/pdf",
+      "artifact_type": "unclassified_document",
+      "classification": "unverified"
+    },
+    {
+      "source_index": 7,
+      "mime_type": "application/pdf",
+      "artifact_type": "mounting_report",
+      "classification": "confirmed_from_filename"
+    }
+  ],
+  "source_coverage": [
+    {
+      "provider": "gmail",
+      "status": "available"
+    },
+    {
+      "provider": "outlook",
+      "status": "search_unavailable",
+      "reason_code": "MSA_TEXT_SEARCH_UNSUPPORTED"
+    }
+  ]
+}

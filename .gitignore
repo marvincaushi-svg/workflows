@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+
+# Dati reali, email originali e documenti dei clienti non devono entrare nel repository.
+private/
+examples/private/
+*.private.json
+*.actual-email.json

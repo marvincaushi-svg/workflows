@@ -1,0 +1,29 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  workflowos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Run unit and end-to-end tests
+        run: python -m unittest discover -s tests -v
+      - name: Exercise the pilot path
+        run: |
+          python -m workflowos.cli run \
+            --process process.schema.yaml \
+            --email examples/pilot/assignment.email.sanitized.json \
+            --case-id pilot-pv-001 \
+            --audit /tmp/workflowos-audit.jsonl \
+            --at 2026-08-03T10:00:00Z
+          python -m workflowos.cli verify-audit \
+            --audit /tmp/workflowos-audit.jsonl
