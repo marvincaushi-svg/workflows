@@ -36,14 +36,11 @@ def _build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--audit", required=True, help="JSONL audit path")
 
     request_parser = subparsers.add_parser(
-        "request-technical-evidence",
-        help="Create remediation work from a sanitized technical review",
+        "create-af-technical-work",
+        help="Create A&F-owned technical production work from a sanitized review",
     )
     request_parser.add_argument("--review", required=True, help="Technical review path")
     request_parser.add_argument("--case-id", required=True, help="Non-sensitive case identifier")
-    request_parser.add_argument(
-        "--recipient-role", required=True, help="Sanitized role responsible for the evidence"
-    )
     request_parser.add_argument(
         "--at", required=True, help="ISO-8601 creation timestamp with timezone"
     )
@@ -79,9 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             review = load_document(args.review)
             decision = evaluate_technical_review(review)
-            result = create_remediation_work(
-                decision, args.case_id, args.recipient_role, args.at
-            )
+            result = create_remediation_work(decision, args.case_id, args.at)
     except WorkflowError as exc:
         print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
         return 2

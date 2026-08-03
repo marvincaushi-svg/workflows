@@ -1,9 +1,12 @@
 {
   "schema_version": "1.0",
   "sanitized": true,
-  "document_intake_status": "ready",
+  "assignment_intake_status": "ready",
   "controls": [
+    {"id": "tag_grid_connection_application", "result": "missing", "evidence": "No TAG produced by A&F was found in the reviewed package."},
+    {"id": "installation_notice_ia", "result": "missing", "evidence": "No IA produced by A&F was found in the reviewed package."},
     {"id": "single_line_diagram", "result": "missing", "evidence": "No single-line AC/DC diagram was found in the reviewed package."},
+    {"id": "system_sizing", "result": "missing", "evidence": "No A&F system sizing and design calculation was found in the reviewed package."},
     {"id": "cable_sizing", "result": "missing", "evidence": "The file labelled as sizing is a roof plan; it has no cable sections, lengths or installation methods."},
     {"id": "ac_dc_protections", "result": "missing", "evidence": "No coordinated AC/DC protection, RCD or SPD schedule was found."},
     {"id": "earthing_bonding", "result": "missing", "evidence": "No earthing or equipotential bonding design was found."},

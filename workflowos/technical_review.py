@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from .core import (
+    AF_TECHNICAL_OWNER_ROLE,
     CASE_ID_RE,
+    SB_ASSIGNMENT_OWNER_ROLE,
     WorkflowError,
     _require_list,
     _require_mapping,
@@ -15,7 +17,10 @@ from .core import (
 
 
 REQUIRED_CONTROLS = (
+    "tag_grid_connection_application",
+    "installation_notice_ia",
     "single_line_diagram",
+    "system_sizing",
     "cable_sizing",
     "ac_dc_protections",
     "earthing_bonding",
@@ -28,14 +33,17 @@ REQUIRED_CONTROLS = (
 VALID_RESULTS = {"verified", "missing", "non_compliant"}
 
 CONTROL_DELIVERABLES = {
+    "tag_grid_connection_application": "TAG grid-connection application",
+    "installation_notice_ia": "IA installation notice",
     "single_line_diagram": "Single-line AC/DC diagram",
+    "system_sizing": "PV system sizing and design calculations",
     "cable_sizing": "Cable sizing with sections, lengths and installation methods",
     "ac_dc_protections": "Coordinated AC/DC protection, RCD and SPD schedule",
     "earthing_bonding": "Earthing and equipotential bonding design",
     "short_circuit_data": "Prospective short-circuit values and breaking-capacity check",
     "maximum_dc_voltage": "Maximum DC voltage calculation at project minimum temperature",
     "battery_installation": "Battery location and installation conditions",
-    "grid_operator_requirements": "Grid-operator approval and connection requirements",
+    "grid_operator_requirements": "Direct grid-operator coordination, submissions, approval and connection requirements",
     "commissioning_measurements": "Final inspection and measurement record",
 }
 
@@ -46,8 +54,8 @@ def evaluate_technical_review(document: dict[str, Any]) -> dict[str, Any]:
     _require_string(document.get("schema_version"), "schema_version")
     if document.get("sanitized") is not True:
         raise WorkflowError("Public technical review input must declare sanitized=true")
-    if document.get("document_intake_status") != "ready":
-        raise WorkflowError("Technical review requires document_intake_status=ready")
+    if document.get("assignment_intake_status") != "ready":
+        raise WorkflowError("Technical review requires assignment_intake_status=ready")
 
     controls = _require_list(document.get("controls"), "controls")
     by_id: dict[str, dict[str, Any]] = {}
@@ -100,14 +108,12 @@ def evaluate_technical_review(document: dict[str, Any]) -> dict[str, Any]:
 def create_remediation_work(
     decision: dict[str, Any],
     case_id: str,
-    recipient_role: str,
     created_at: str,
 ) -> dict[str, Any]:
-    """Turn missing controls into one assignable, evidence-gated work item."""
+    """Assign all technical production and grid coordination to A&F."""
 
     if not CASE_ID_RE.fullmatch(case_id):
         raise WorkflowError("case_id must be a non-sensitive stable identifier")
-    recipient = _require_string(recipient_role, "recipient_role")
     timestamp = _require_timestamp(created_at, "created_at")
     if decision.get("decision") != "changes_required":
         raise WorkflowError("Remediation work requires decision=changes_required")
@@ -124,15 +130,19 @@ def create_remediation_work(
     return {
         "work_id": f"{case_id}.technical-remediation.1",
         "case_id": case_id,
-        "type": "request_technical_evidence",
+        "type": "produce_af_technical_package",
         "status": "open",
-        "assigned_to_role": recipient,
+        "assigned_to_role": AF_TECHNICAL_OWNER_ROLE,
+        "assignment_source_role": SB_ASSIGNMENT_OWNER_ROLE,
+        "available_project_data_provider_role": SB_ASSIGNMENT_OWNER_ROLE,
+        "grid_operator_manager_role": AF_TECHNICAL_OWNER_ROLE,
         "created_at": timestamp,
         "source_decision": "changes_required",
         "deliverables": [
             {
                 "control_id": control_id,
                 "description": CONTROL_DELIVERABLES[control_id],
+                "owner_role": AF_TECHNICAL_OWNER_ROLE,
                 "acceptance": "content_verified",
                 "status": "requested",
             }

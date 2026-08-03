@@ -1,15 +1,43 @@
 {
   "schema_version": "1.0",
   "process": {
-    "id": "pv-pre-installation-document-intake-v1",
-    "name": "PV pre-installation document intake",
-    "readiness_scope": "document_intake_only",
+    "id": "pv-assignment-intake-v2",
+    "name": "PV assignment intake and responsibility routing",
+    "readiness_scope": "assignment_intake_only",
     "goal": {
-      "id": "pv-document-package-ready",
-      "description": "Determine whether the evidence package is ready for document review without inventing missing data."
+      "id": "pv-assignment-ready",
+      "description": "Capture the SB assignment and route technical production to A&F without inventing missing project data."
+    },
+    "responsibilities": {
+      "assignment_owner": "sb_energetica",
+      "available_project_data_provider": "sb_energetica",
+      "technical_document_owner": "af_elektro",
+      "grid_operator_manager": "af_elektro",
+      "af_elektro_deliverables": [
+        "tag_grid_connection_application",
+        "installation_notice_ia",
+        "single_line_diagram",
+        "system_sizing"
+      ]
     },
     "intake": {
-      "required_channel": "email"
+      "required_channel": "email",
+      "project_data_policy": "accept_available_without_making_it_mandatory",
+      "optional_project_data": {
+        "artifact_types": [
+          "optimizer_qr_map",
+          "signed_architectural_layout",
+          "roofing_plan",
+          "pv_design_report",
+          "string_diagram",
+          "system_sizing",
+          "mounting_report",
+          "bill_of_materials"
+        ],
+        "fact_paths": [
+          "requested_start_date"
+        ]
+      }
     },
     "checklist": {
       "required_artifacts": [
@@ -17,54 +45,9 @@
           "id": "assignment-email",
           "artifact_type": "assignment_email",
           "description": "Assignment or request email"
-        },
-        {
-          "id": "optimizer-qr-map",
-          "artifact_type": "optimizer_qr_map",
-          "description": "Optimizer QR map"
-        },
-        {
-          "id": "signed-architectural-layout",
-          "artifact_type": "signed_architectural_layout",
-          "description": "Signed final architectural layout"
-        },
-        {
-          "id": "roofing-plan",
-          "artifact_type": "roofing_plan",
-          "description": "Roofing plan"
-        },
-        {
-          "id": "pv-design-report",
-          "artifact_type": "pv_design_report",
-          "description": "PV design report"
-        },
-        {
-          "id": "string-diagram",
-          "artifact_type": "string_diagram",
-          "description": "String diagram"
-        },
-        {
-          "id": "system-sizing",
-          "artifact_type": "system_sizing",
-          "description": "System sizing document"
-        },
-        {
-          "id": "mounting-report",
-          "artifact_type": "mounting_report",
-          "description": "Mounting system report"
-        },
-        {
-          "id": "bill-of-materials",
-          "artifact_type": "bill_of_materials",
-          "description": "Bill of materials"
         }
       ],
-      "required_facts": [
-        {
-          "path": "requested_start_date",
-          "description": "Requested or proposed start date"
-        }
-      ]
+      "required_facts": []
     },
     "states": {
       "initial": "new",

@@ -39,7 +39,10 @@ class WorkflowOSMVPTests(unittest.TestCase):
         self.assertEqual(evaluation["status"], "ready")
         self.assertEqual(evaluation["missing_artifacts"], [])
         self.assertEqual(evaluation["missing_facts"], [])
-        self.assertEqual(evaluation["readiness_scope"], "document_intake_only")
+        self.assertEqual(evaluation["readiness_scope"], "assignment_intake_only")
+        self.assertEqual(case["assignment_owner_role"], "sb_energetica")
+        self.assertEqual(case["technical_document_owner_role"], "af_elektro")
+        self.assertEqual(case["grid_operator_manager_role"], "af_elektro")
 
     def test_no_unobserved_customer_fields_are_invented(self):
         case = self.build_pilot_case()
@@ -52,33 +55,58 @@ class WorkflowOSMVPTests(unittest.TestCase):
         self.assertNotIn("glaeser", serialized)
         self.assertNotIn("gläser", serialized)
 
-    def test_incomplete_evidence_package_remains_blocked(self):
+    def test_missing_project_data_does_not_block_assignment(self):
         email = copy.deepcopy(self.email)
-        email["attachments"][1]["classification"] = "signature_not_verified"
-        email["attachments"][5]["classification"] = "unverified"
+        email["observations"] = []
+        email["attachments"] = []
 
-        case = build_case_from_email(self.process, email, "pilot-pv-blocked")
+        case = build_case_from_email(self.process, email, "pilot-pv-no-project-data")
         evaluation = evaluate_case(self.process, case)
-        self.assertEqual(evaluation["status"], "blocked")
-        self.assertEqual(
-            evaluation["missing_artifacts"],
-            ["signed_architectural_layout", "roofing_plan", "bill_of_materials"],
-        )
+        self.assertEqual(evaluation["status"], "ready")
+        self.assertEqual(evaluation["missing_facts"], [])
 
-    def test_unverified_classification_never_satisfies_a_required_artifact(self):
+    def test_sb_project_data_is_optional_input(self):
         email = copy.deepcopy(self.email)
-        email["attachments"][1]["classification"] = "signature_not_verified"
+        email["attachments"] = []
 
-        case = build_case_from_email(self.process, email, "pilot-pv-unverified")
+        case = build_case_from_email(self.process, email, "pilot-pv-optional-data")
         evaluation = evaluate_case(self.process, case)
-        self.assertIn("signed_architectural_layout", evaluation["missing_artifacts"])
-        self.assertEqual(evaluation["status"], "blocked")
+        self.assertEqual(evaluation["missing_artifacts"], [])
+        self.assertEqual(evaluation["status"], "ready")
 
     def test_non_email_intake_is_rejected(self):
         not_email = copy.deepcopy(self.email)
         not_email["source_type"] = "form"
         with self.assertRaisesRegex(WorkflowError, "source_type must be email"):
             build_case_from_email(self.process, not_email, "pilot-pv-001")
+
+    def test_sb_cannot_be_configured_as_technical_owner(self):
+        process = copy.deepcopy(self.process)
+        process["process"]["responsibilities"]["technical_document_owner"] = (
+            "sb_energetica"
+        )
+
+        with self.assertRaisesRegex(
+            WorkflowError,
+            "technical_document_owner must be af_elektro",
+        ):
+            build_case_from_email(process, self.email, "pilot-pv-invalid-owner")
+
+    def test_sb_project_data_cannot_be_made_mandatory(self):
+        process = copy.deepcopy(self.process)
+        process["process"]["checklist"]["required_artifacts"].append(
+            {
+                "id": "system-sizing",
+                "artifact_type": "system_sizing",
+                "description": "System sizing document",
+            }
+        )
+
+        with self.assertRaisesRegex(
+            WorkflowError,
+            "Only the SB assignment email may be mandatory",
+        ):
+            build_case_from_email(process, self.email, "pilot-pv-invalid-input")
 
     def test_audit_log_detects_tampering(self):
         case = self.build_pilot_case()
@@ -147,7 +175,7 @@ class WorkflowOSMVPTests(unittest.TestCase):
 
         self.assertEqual(decision["decision"], "changes_required")
         self.assertEqual(decision["verified_controls"], [])
-        self.assertEqual(len(decision["missing_controls"]), 9)
+        self.assertEqual(len(decision["missing_controls"]), 12)
         self.assertTrue(decision["professional_signoff_required"])
 
     def test_missing_control_cannot_be_silently_omitted(self):
@@ -159,7 +187,12 @@ class WorkflowOSMVPTests(unittest.TestCase):
 
     def test_non_compliance_is_rejected_not_treated_as_missing(self):
         review = load_document(TECHNICAL_REVIEW_PATH)
-        review["controls"][0]["result"] = "non_compliant"
+        single_line_diagram = next(
+            control
+            for control in review["controls"]
+            if control["id"] == "single_line_diagram"
+        )
+        single_line_diagram["result"] = "non_compliant"
         decision = evaluate_technical_review(review)
 
         self.assertEqual(decision["decision"], "rejected")
@@ -171,19 +204,28 @@ class WorkflowOSMVPTests(unittest.TestCase):
         work = create_remediation_work(
             decision,
             "pilot-pv-001",
-            "technical_document_owner",
             "2026-08-03T13:00:00Z",
         )
 
         self.assertEqual(work["status"], "open")
+        self.assertEqual(work["type"], "produce_af_technical_package")
         self.assertEqual(work["source_decision"], "changes_required")
-        self.assertEqual(len(work["deliverables"]), 9)
+        self.assertEqual(work["assigned_to_role"], "af_elektro")
+        self.assertEqual(work["assignment_source_role"], "sb_energetica")
+        self.assertEqual(
+            work["available_project_data_provider_role"], "sb_energetica"
+        )
+        self.assertEqual(work["grid_operator_manager_role"], "af_elektro")
+        self.assertEqual(len(work["deliverables"]), 12)
         self.assertEqual(
             {item["control_id"] for item in work["deliverables"]},
             set(decision["missing_controls"]),
         )
         self.assertTrue(
-            all(item["status"] == "requested" for item in work["deliverables"])
+            all(
+                item["status"] == "requested" and item["owner_role"] == "af_elektro"
+                for item in work["deliverables"]
+            )
         )
 
     def test_approved_review_does_not_create_remediation_work(self):
@@ -196,23 +238,20 @@ class WorkflowOSMVPTests(unittest.TestCase):
             create_remediation_work(
                 decision,
                 "pilot-pv-001",
-                "technical_document_owner",
                 "2026-08-03T13:00:00Z",
             )
 
-    def test_cli_creates_sanitized_technical_evidence_request(self):
+    def test_cli_creates_af_owned_technical_work(self):
         run = subprocess.run(
             [
                 sys.executable,
                 "-m",
                 "workflowos.cli",
-                "request-technical-evidence",
+                "create-af-technical-work",
                 "--review",
                 str(TECHNICAL_REVIEW_PATH),
                 "--case-id",
                 "pilot-pv-001",
-                "--recipient-role",
-                "technical_document_owner",
                 "--at",
                 "2026-08-03T13:00:00Z",
             ],

@@ -17,6 +17,14 @@ KNOWN_CLASSIFICATIONS = ACCEPTED_CLASSIFICATIONS | {
     "signature_not_verified",
     "unverified",
 }
+SB_ASSIGNMENT_OWNER_ROLE = "sb_energetica"
+AF_TECHNICAL_OWNER_ROLE = "af_elektro"
+AF_TECHNICAL_DELIVERABLES = (
+    "tag_grid_connection_application",
+    "installation_notice_ia",
+    "single_line_diagram",
+    "system_sizing",
+)
 
 
 class WorkflowError(ValueError):
@@ -85,12 +93,51 @@ def validate_process(document: dict[str, Any]) -> dict[str, Any]:
     _require_string(goal.get("id"), "process.goal.id")
     _require_string(goal.get("description"), "process.goal.description")
 
+    responsibilities = _require_mapping(
+        process.get("responsibilities"), "process.responsibilities"
+    )
+    expected_roles = {
+        "assignment_owner": SB_ASSIGNMENT_OWNER_ROLE,
+        "available_project_data_provider": SB_ASSIGNMENT_OWNER_ROLE,
+        "technical_document_owner": AF_TECHNICAL_OWNER_ROLE,
+        "grid_operator_manager": AF_TECHNICAL_OWNER_ROLE,
+    }
+    for field, expected_role in expected_roles.items():
+        observed_role = _require_string(
+            responsibilities.get(field), f"process.responsibilities.{field}"
+        )
+        if observed_role != expected_role:
+            raise WorkflowError(
+                f"process.responsibilities.{field} must be {expected_role}"
+            )
+    deliverables = [
+        _require_string(value, f"process.responsibilities.af_elektro_deliverables[{index}]")
+        for index, value in enumerate(
+            _require_list(
+                responsibilities.get("af_elektro_deliverables"),
+                "process.responsibilities.af_elektro_deliverables",
+            )
+        )
+    ]
+    if tuple(deliverables) != AF_TECHNICAL_DELIVERABLES:
+        raise WorkflowError(
+            "process.responsibilities.af_elektro_deliverables must contain TAG, IA, "
+            "single-line diagram and system sizing"
+        )
+
     intake = _require_mapping(process.get("intake"), "process.intake")
     required_channel = _require_string(
         intake.get("required_channel"), "process.intake.required_channel"
     )
     if required_channel != "email":
         raise WorkflowError("The MVP supports email-first intake only")
+    project_data_policy = _require_string(
+        intake.get("project_data_policy"), "process.intake.project_data_policy"
+    )
+    if project_data_policy != "accept_available_without_making_it_mandatory":
+        raise WorkflowError(
+            "SB project data must remain optional input for A&F technical production"
+        )
 
     checklist = _require_mapping(process.get("checklist"), "process.checklist")
     required_artifacts = _require_list(
@@ -119,6 +166,10 @@ def validate_process(document: dict[str, Any]) -> dict[str, Any]:
             raise WorkflowError(f"Duplicate required artifact type: {artifact_type}")
         artifact_ids.add(item_id)
         artifact_types.add(artifact_type)
+    if artifact_types != {"assignment_email"}:
+        raise WorkflowError(
+            "Only the SB assignment email may be mandatory at assignment intake"
+        )
 
     fact_paths: set[str] = set()
     for index, item_value in enumerate(required_facts):
@@ -129,6 +180,10 @@ def validate_process(document: dict[str, Any]) -> dict[str, Any]:
         if path in fact_paths:
             raise WorkflowError(f"Duplicate required fact path: {path}")
         fact_paths.add(path)
+    if required_facts:
+        raise WorkflowError(
+            "Project facts supplied by SB must remain optional at assignment intake"
+        )
 
     states = _require_mapping(process.get("states"), "process.states")
     for state_name in ("initial", "ready", "blocked"):
@@ -342,6 +397,16 @@ def build_case_from_email(
         "created_at": normalized["received_at"],
         "source_channel": "email",
         "source_party_ref": normalized["source_party_ref"],
+        "assignment_owner_role": process["responsibilities"]["assignment_owner"],
+        "available_project_data_provider_role": process["responsibilities"][
+            "available_project_data_provider"
+        ],
+        "technical_document_owner_role": process["responsibilities"][
+            "technical_document_owner"
+        ],
+        "grid_operator_manager_role": process["responsibilities"][
+            "grid_operator_manager"
+        ],
         "sanitized": True,
         "status": process["states"]["initial"],
         "artifacts": artifacts,
@@ -416,6 +481,7 @@ def evaluate_case(
         "process_id": process["id"],
         "goal_id": process["goal"]["id"],
         "readiness_scope": process["readiness_scope"],
+        "responsibilities": copy.deepcopy(process["responsibilities"]),
         "status": process["states"]["ready"] if ready else process["states"]["blocked"],
         "missing_artifacts": missing_artifacts,
         "missing_facts": missing_facts,

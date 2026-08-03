@@ -7,23 +7,26 @@ WorkflowOS governa decisioni, processi, persone, AI e dati attraverso un sistema
 Questo repository contiene il primo percorso eseguibile, deliberatamente piccolo:
 
 ```text
-email di assegnazione
+email di assegnazione SB
 → creazione Case
-→ normalizzazione delle prove
-→ checklist del Blueprint
-→ stato blocked oppure ready
+→ normalizzazione dei dati progettuali disponibili
+→ stato assegnazione blocked oppure ready
+→ presa in carico tecnica A&F
+→ produzione TAG, IA, schema e dimensionamento
+→ gestione diretta del gestore di rete da parte di A&F
+→ controllo tecnico changes_required, rejected oppure approved
 → registro verificabile di eventi e decisioni
 ```
 
-Non è ancora un gestionale completo e non dichiara un impianto tecnicamente o normativamente approvato. Lo stato `ready` vale esclusivamente per lo scope `document_intake_only`.
+Non è ancora un gestionale completo e non dichiara un impianto tecnicamente o normativamente approvato. Lo stato `ready` vale esclusivamente per lo scope `assignment_intake_only`.
 
-Il controllo tecnico successivo è separato dalla completezza documentale. Nel pilota restituisce `changes_required`: il file denominato come dimensionamento è stato verificato come piano di copertura da 18,80 kWp e non contiene schema unifilare, dimensionamento dei cavi o protezioni. Restano richiesti nove controlli elettrici espliciti; nessuna loro assenza viene trasformata automaticamente in una non conformità o in un'approvazione.
+Il controllo tecnico successivo è separato dalla presa in carico della commessa. Nel pilota restituisce `changes_required`: un file ricevuto da SB e denominato come dimensionamento è stato verificato come piano di copertura da 18,80 kWp. È un dato progettuale disponibile, non un dimensionamento prodotto da A&F e non trasferisce a SB la responsabilità di produrre TAG, IA, schema o dimensionamento. Restano richiesti dodici controlli tecnici espliciti; nessuna loro assenza viene trasformata automaticamente in una non conformità o in un'approvazione.
 
 Una decisione `changes_required` può essere trasformata in un'unica attività operativa sanificata. L'attività elenca ogni documento o verifica richiesta, resta `open` finché tutti i deliverable non sono verificati nel contenuto e mantiene obbligatoria la firma del professionista autorizzato.
 
 ## Risultato del pilota
 
-La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. Dopo il controllo del contenuto dei sette PDF originali, il percorso restituisce `ready` per lo scope limitato `document_intake_only`. La verifica ha confermato:
+La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. La commessa risulta `ready` per lo scope limitato `assignment_intake_only`; soltanto l'email di assegnazione è obbligatoria. Gli allegati e gli altri fatti progettuali sono registrati come dati disponibili forniti da SB e non come deliverable obbligatori di SB. La verifica degli allegati ha confermato:
 
 - layout finale firmato e datato;
 - piano di copertura con 40 moduli e fermaneve;
@@ -47,10 +50,9 @@ python -m workflowos.cli run \
 python -m workflowos.cli verify-audit \
   --audit /tmp/workflowos-audit.jsonl
 
-python -m workflowos.cli request-technical-evidence \
+python -m workflowos.cli create-af-technical-work \
   --review examples/pilot/technical-review.sanitized.json \
   --case-id pilot-pv-001 \
-  --recipient-role technical_document_owner \
   --at 2026-08-03T13:00:00Z
 ```
 
@@ -72,6 +74,9 @@ I test coprono:
 
 ## Confini delle responsabilità
 
+- **SB Energetica** assegna la commessa e fornisce esclusivamente i dati progettuali già disponibili. Tali dati sono input facoltativi: la loro presenza, assenza o denominazione non rende SB responsabile dei documenti tecnici.
+- **A&F Elektro** produce TAG, IA, schema unifilare e dimensionamento, esegue le verifiche tecniche collegate e gestisce direttamente il gestore di rete.
+- Ogni attività generata da `changes_required` viene assegnata ad `af_elektro`; il destinatario non è selezionabile da CLI e non può essere spostato su SB.
 - `normalize_email_evidence`: acquisisce e normalizza soltanto le prove osservate; non le collega e non le completa.
 - `build_case_from_email`: collega le prove normalizzate al Case.
 - `evaluate_case`: applica soltanto il Blueprint e decide `blocked`/`ready`.
