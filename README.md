@@ -28,6 +28,18 @@ Dopo l'ultimazione dell'installazione viene applicato lo stesso controllo al RaS
 
 Il modulo `workflowos.automation` collega questi controlli agli eventi delle colonne file di Monday. L'associazione tra ID delle colonne e tipo di documento è configurabile e non contiene identificativi della bacheca nel repository pubblico. Il runtime parte in modalità `test`: costruisce la richiesta email completa ma non chiama mai l'adapter di invio. La modalità `live` richiede sia `mode=live` sia l'interruttore separato `allow_external_email=true`; senza entrambi l'invio viene rifiutato. Gli eventi duplicati, le colonne estranee e le commesse provenienti da una bacheca diversa non possono generare email.
 
+L'adapter `workflowos.hostpoint_email` collega il mittente aziendale A&F a Hostpoint tramite SMTP SSL/TLS. Accetta esclusivamente `Marvin.Caushi@elektro-af.ch` come utente e mittente, verifica nuovamente l'hash SHA-256 di ogni allegato scaricato da Monday e registra la consegna soltanto dopo l'accettazione del server SMTP. Il provider è fissato a `asmtp.mail.hostpoint.ch:465`; la password viene letta dall'ambiente e non deve essere inserita nel repository.
+
+### Configurazione Hostpoint locale
+
+Copiare `.env.example` in `.env.local` e compilare la password fuori da Git. Prima del test controllato lasciare:
+
+```text
+WORKFLOWOS_SMTP_LIVE_ENABLED=false
+```
+
+L'invio reale richiede tre autorizzazioni indipendenti: `mode=live`, `allow_external_email=true` e `WORKFLOWOS_SMTP_LIVE_ENABLED=true`. La sola configurazione SMTP non è quindi sufficiente ad attivare email esterne.
+
 ## Risultato del pilota
 
 La fixture pubblica deriva da una vera email operativa, ma è sanificata: identità, oggetto, corpo, nomi dei file, cliente e indirizzo non sono nel repository. La commessa risulta `ready` per lo scope limitato `assignment_intake_only`; soltanto l'email di assegnazione è obbligatoria. Gli allegati e gli altri fatti progettuali sono registrati come dati disponibili forniti da SB e non come deliverable obbligatori di SB. La verifica degli allegati ha confermato:
@@ -80,6 +92,7 @@ I test coprono:
 - invio del RaSi/SiNa firmato soltanto dopo l'ultimazione dell'impianto.
 - runtime Monday in modalità test senza invii esterni;
 - interruttore esplicito per l'email reale e blocco delle duplicazioni.
+- adapter SMTP Hostpoint con SSL, verifica del mittente A&F e controllo hash degli allegati.
 
 ## Confini delle responsabilità
 
