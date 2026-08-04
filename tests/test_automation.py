@@ -84,8 +84,12 @@ class WorkflowOSAutomationTests(unittest.TestCase):
         value.update(overrides)
         return value
 
-    def verification(self, **overrides):
+    def verification(self, event, **overrides):
+        document_type = self.config["document_columns"].get(event["column_id"])
         value = {
+            "case_id": event["case_id"],
+            "document_type": document_type,
+            "attachment_ref_sha256": event["attachment_ref_sha256"],
             "content_verified": True,
             "latest_version": True,
             "identity_extraction_verified": True,
@@ -100,14 +104,15 @@ class WorkflowOSAutomationTests(unittest.TestCase):
         for index, column_id in enumerate(
             ("tag-column", "ia-column", "schema-column"), start=1
         ):
+            event = self.event(
+                column_id,
+                index,
+                grid_operator_practices_accepted=index == 3,
+            )
             outcome = handle_monday_file_event(
                 current,
-                self.event(
-                    column_id,
-                    index,
-                    grid_operator_practices_accepted=index == 3,
-                ),
-                self.verification(),
+                event,
+                self.verification(event),
                 config or self.config,
                 email_sender=sender,
             )
@@ -165,14 +170,15 @@ class WorkflowOSAutomationTests(unittest.TestCase):
             }
 
         outcome = self.process_practice_documents(config=config, sender=sender)
+        repeated_event = self.event(
+            "schema-column",
+            3,
+            grid_operator_practices_accepted=True,
+        )
         repeated = handle_monday_file_event(
             outcome["state"],
-            self.event(
-                "schema-column",
-                3,
-                grid_operator_practices_accepted=True,
-            ),
-            self.verification(),
+            repeated_event,
+            self.verification(repeated_event),
             config,
             email_sender=sender,
         )
@@ -182,10 +188,11 @@ class WorkflowOSAutomationTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
 
     def test_duplicate_event_with_changed_attachment_is_rejected_without_mutation(self):
+        first_event = self.event("tag-column", 1)
         first = handle_monday_file_event(
             self.state,
-            self.event("tag-column", 1),
-            self.verification(),
+            first_event,
+            self.verification(first_event),
             self.config,
         )
         conflicting = self.event("tag-column", 1)
@@ -193,13 +200,42 @@ class WorkflowOSAutomationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(WorkflowError, "different attachment"):
             handle_monday_file_event(
-                first["state"], conflicting, self.verification(), self.config
+                first["state"],
+                conflicting,
+                self.verification(conflicting),
+                self.config,
             )
 
         self.assertEqual(
             first["state"]["asset_locators"]["tag_grid_connection_application"],
             "monday-asset-1",
         )
+
+    def test_verification_is_bound_to_case_type_and_attachment(self):
+        event = self.event("tag-column", 1)
+        valid = self.verification(event)
+        invalid_values = (
+            ("case_id", "other-case", "different case"),
+            (
+                "document_type",
+                "installation_notice_ia",
+                "different document type",
+            ),
+            ("attachment_ref_sha256", "f" * 64, "different attachment"),
+        )
+
+        for field, value, expected_error in invalid_values:
+            with self.subTest(field=field):
+                verification = copy.deepcopy(valid)
+                verification[field] = value
+                with self.assertRaisesRegex(WorkflowError, expected_error):
+                    handle_monday_file_event(
+                        self.state,
+                        event,
+                        verification,
+                        self.config,
+                    )
+                self.assertEqual(self.state["asset_locators"], {})
 
     def test_mismatched_document_blocks_email_adapter(self):
         calls = []
@@ -210,14 +246,15 @@ class WorkflowOSAutomationTests(unittest.TestCase):
             identity = copy.deepcopy(self.identity)
             if column_id == "schema-column":
                 identity["installation_address"]["house_number"] = "11"
+            event = self.event(
+                column_id,
+                index,
+                grid_operator_practices_accepted=index == 3,
+            )
             outcome = handle_monday_file_event(
                 current,
-                self.event(
-                    column_id,
-                    index,
-                    grid_operator_practices_accepted=index == 3,
-                ),
-                self.verification(document_identity=identity),
+                event,
+                self.verification(event, document_identity=identity),
                 self.config,
                 email_sender=lambda request: calls.append(request),
             )
@@ -228,10 +265,11 @@ class WorkflowOSAutomationTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_signed_safety_report_is_ready_only_after_installation(self):
+        event = self.event("sina-column", 4, installation_completed=True)
         outcome = handle_monday_file_event(
             self.state,
-            self.event("sina-column", 4, installation_completed=True),
-            self.verification(),
+            event,
+            self.verification(event),
             self.config,
         )
 
@@ -243,27 +281,30 @@ class WorkflowOSAutomationTests(unittest.TestCase):
 
     def test_unsigned_safety_report_is_rejected(self):
         with self.assertRaisesRegex(WorkflowError, "professional signoff"):
+            event = self.event("sina-column", 4, installation_completed=True)
             handle_monday_file_event(
                 self.state,
-                self.event("sina-column", 4, installation_completed=True),
-                self.verification(professional_signoff_verified=False),
+                event,
+                self.verification(event, professional_signoff_verified=False),
                 self.config,
             )
 
     def test_wrong_board_event_is_rejected(self):
         with self.assertRaisesRegex(WorkflowError, "board_id does not match"):
+            event = self.event("tag-column", 1, board_id="wrong-board")
             handle_monday_file_event(
                 self.state,
-                self.event("tag-column", 1, board_id="wrong-board"),
-                self.verification(),
+                event,
+                self.verification(event),
                 self.config,
             )
 
     def test_unmapped_column_is_ignored_without_email(self):
+        event = self.event("unrelated-column", 1)
         outcome = handle_monday_file_event(
             self.state,
-            self.event("unrelated-column", 1),
-            self.verification(),
+            event,
+            self.verification(event),
             self.config,
         )
 
