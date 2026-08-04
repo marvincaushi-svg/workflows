@@ -1,0 +1,304 @@
+{
+  "schema_version": "1.0",
+  "timezone": "Europe/Zurich",
+  "policies": {
+    "retry": {
+      "max_attempts": 3,
+      "base_delay_seconds": 300,
+      "max_delay_seconds": 3600
+    },
+    "external_email": {
+      "default_mode": "draft",
+      "mandatory_send_guards": [
+        "verified_recipient",
+        "idempotency_key",
+        "provider_live_switch"
+      ]
+    },
+    "communication": {
+      "default_language": "it-CH",
+      "recipient_rules": {
+        "info@elektro-af.ch": {
+          "language": "de-CH",
+          "swiss_spelling": true
+        }
+      }
+    }
+  },
+  "collectors": {
+    "email.assignment": {
+      "source": "email",
+      "layer": {
+        "capability": "email_collection",
+        "provider": "configured_mailbox",
+        "adapter": "email_assignment_collector"
+      }
+    },
+    "monday.case": {
+      "source": "monday",
+      "layer": {
+        "capability": "project_data_collection",
+        "provider": "monday",
+        "adapter": "monday_case_collector"
+      }
+    },
+    "workflowos.event": {
+      "source": "workflowos",
+      "layer": {
+        "capability": "internal_event_collection",
+        "provider": "workflowos",
+        "adapter": "audit_event_collector"
+      }
+    },
+    "github.change": {
+      "source": "github",
+      "layer": {
+        "capability": "source_change_collection",
+        "provider": "github",
+        "adapter": "github_change_collector"
+      }
+    }
+  },
+  "automations": [
+    {
+      "id": "sb-assignment-intake",
+      "enabled": true,
+      "owner": "af_elektro",
+      "objective": "Create one traceable WorkflowOS case from a verified SB assignment email.",
+      "output": "case_record",
+      "layer": {
+        "capability": "assignment_intake",
+        "provider": "workflowos",
+        "adapter": "workflowos.core.build_case_from_email"
+      },
+      "trigger": {
+        "type": "event",
+        "collector_id": "email.assignment",
+        "event_type": "sb_assignment_received"
+      },
+      "dependencies": [],
+      "priority": 100,
+      "failure_policy": "retry_then_dead_letter",
+      "action": {
+        "mode": "internal_write",
+        "guards": [
+          "sanitized_evidence",
+          "verified_sender_reference"
+        ]
+      }
+    },
+    {
+      "id": "af-technical-work-plan",
+      "enabled": true,
+      "owner": "af_elektro",
+      "objective": "Create the ordered A&F technical work plan when evidence requires changes.",
+      "output": "af_work_plan",
+      "layer": {
+        "capability": "technical_work_planning",
+        "provider": "workflowos",
+        "adapter": "workflowos.technical_review.create_remediation_plan"
+      },
+      "trigger": {
+        "type": "event",
+        "collector_id": "workflowos.event",
+        "event_type": "technical_review_changes_required"
+      },
+      "dependencies": [
+        "sb-assignment-intake"
+      ],
+      "priority": 90,
+      "failure_policy": "retry_then_dead_letter",
+      "action": {
+        "mode": "internal_write",
+        "guards": [
+          "review_evidence_available"
+        ]
+      }
+    },
+    {
+      "id": "missing-source-data-draft",
+      "enabled": true,
+      "owner": "af_elektro",
+      "objective": "Draft one request to SB only for explicitly missing source data supplied by SB.",
+      "output": "missing_source_data_email_draft",
+      "layer": {
+        "capability": "missing_source_data_communication",
+        "provider": "configured_mailbox",
+        "adapter": "email_draft_adapter"
+      },
+      "trigger": {
+        "type": "event",
+        "collector_id": "workflowos.event",
+        "event_type": "required_source_data_missing"
+      },
+      "dependencies": [
+        "sb-assignment-intake"
+      ],
+      "priority": 80,
+      "failure_policy": "manual_review",
+      "action": {
+        "mode": "draft",
+        "guards": [
+          "missing_data_is_source_input",
+          "af_deliverables_excluded",
+          "verified_recipient"
+        ]
+      }
+    },
+    {
+      "id": "accepted-practices-delivery",
+      "enabled": true,
+      "owner": "af_elektro",
+      "objective": "Send the accepted TAG, IA and single-line diagram once all document checks match the Monday case.",
+      "output": "accepted_practices_email_delivery",
+      "layer": {
+        "capability": "verified_document_delivery",
+        "provider": "hostpoint",
+        "adapter": "workflowos.hostpoint_email.HostpointSmtpSender"
+      },
+      "trigger": {
+        "type": "event",
+        "collector_id": "monday.case",
+        "event_type": "accepted_practices_verified"
+      },
+      "dependencies": [
+        "af-technical-work-plan"
+      ],
+      "priority": 95,
+      "failure_policy": "retry_then_dead_letter",
+      "action": {
+        "mode": "guarded_send",
+        "guards": [
+          "verified_recipient",
+          "verified_document_identity",
+          "latest_document_version",
+          "accepted_grid_practices",
+          "attachment_hashes",
+          "idempotency_key",
+          "provider_live_switch"
+        ]
+      }
+    },
+    {
+      "id": "completion-report-delivery",
+      "enabled": true,
+      "owner": "af_elektro",
+      "objective": "Send the signed RaSi or SiNa once completion and document identity are verified.",
+      "output": "signed_safety_report_email_delivery",
+      "layer": {
+        "capability": "verified_document_delivery",
+        "provider": "hostpoint",
+        "adapter": "workflowos.hostpoint_email.HostpointSmtpSender"
+      },
+      "trigger": {
+        "type": "event",
+        "collector_id": "monday.case",
+        "event_type": "signed_safety_report_verified"
+      },
+      "dependencies": [
+        "accepted-practices-delivery"
+      ],
+      "priority": 95,
+      "failure_policy": "retry_then_dead_letter",
+      "action": {
+        "mode": "guarded_send",
+        "guards": [
+          "verified_recipient",
+          "verified_document_identity",
+          "latest_document_version",
+          "installation_completed",
+          "professional_signoff_verified",
+          "attachment_hashes",
+          "idempotency_key",
+          "provider_live_switch"
+        ]
+      }
+    },
+    {
+      "id": "daily-operations-brief",
+      "enabled": true,
+      "owner": "af_elektro",
+      "objective": "Produce one morning brief of ready, blocked, retrying and failed automation work.",
+      "output": "daily_operations_brief",
+      "layer": {
+        "capability": "operations_reporting",
+        "provider": "workflowos",
+        "adapter": "workflowos.control_plane.build_health_report"
+      },
+      "trigger": {
+        "type": "schedule",
+        "local_time": "07:00",
+        "weekdays": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "dependencies": [],
+      "priority": 70,
+      "failure_policy": "retry_then_dead_letter",
+      "action": {
+        "mode": "observe",
+        "guards": []
+      }
+    },
+    {
+      "id": "automation-health-monitor",
+      "enabled": true,
+      "owner": "af_elektro",
+      "objective": "Detect due retries and dead letters before the operational morning brief.",
+      "output": "automation_health_report",
+      "layer": {
+        "capability": "automation_health_monitoring",
+        "provider": "workflowos",
+        "adapter": "workflowos.control_plane.build_health_report"
+      },
+      "trigger": {
+        "type": "schedule",
+        "local_time": "06:50",
+        "weekdays": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "dependencies": [],
+      "priority": 85,
+      "failure_policy": "retry_then_dead_letter",
+      "action": {
+        "mode": "observe",
+        "guards": []
+      }
+    },
+    {
+      "id": "github-quality-gate",
+      "enabled": true,
+      "owner": "af_elektro",
+      "objective": "Validate the automation catalog and test the deterministic runtime after each code change.",
+      "output": "quality_gate_result",
+      "layer": {
+        "capability": "continuous_validation",
+        "provider": "github",
+        "adapter": "github_actions"
+      },
+      "trigger": {
+        "type": "event",
+        "collector_id": "github.change",
+        "event_type": "repository_change"
+      },
+      "dependencies": [],
+      "priority": 100,
+      "failure_policy": "manual_review",
+      "action": {
+        "mode": "observe",
+        "guards": []
+      }
+    }
+  ]
+}
