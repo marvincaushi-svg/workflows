@@ -309,7 +309,9 @@ def _build_email_request(
     )
     return {
         "source": "workflowos",
-        "from_organization_role": "af_elektro",
+        "from_organization_role": _require_string(
+            handoff.get("assigned_to_role"), "handoff.assigned_to_role"
+        ),
         "recipient_name": email_delivery.get("recipient_name"),
         "recipient_email": recipient_email,
         "case_id": case_id,
