@@ -21,6 +21,10 @@ jobs:
         run: |
           python -m workflowos.cli validate-automation-catalog \
             --catalog automation.catalog.json
+          python -m workflowos.cli plan-automation-events \
+            --catalog automation.catalog.json \
+            --events examples/automation/events.sanitized.json \
+            --at 2026-08-04T05:15:00Z
           python -m workflowos.cli plan-automation-schedule \
             --catalog automation.catalog.json \
             --at 2026-08-04T05:00:00Z
