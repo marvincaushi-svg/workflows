@@ -120,6 +120,23 @@ def handle_monday_file_event(
     )
     asset_locator = _require_string(event.get("asset_locator"), "event.asset_locator")
 
+    processed_events = _require_mapping(
+        updated.setdefault("processed_events", {}), "state.processed_events"
+    )
+    previous_attachment_ref = processed_events.get(event_ref)
+    if previous_attachment_ref is not None:
+        if previous_attachment_ref != attachment_ref:
+            raise WorkflowError(
+                "Duplicate Monday event has a different attachment reference"
+            )
+        result = {
+            "status": "ignored_duplicate_event",
+            "email_sent": False,
+            "event_ref_sha256": event_ref,
+        }
+        updated["last_result"] = result
+        return {"state": updated, "result": result}
+
     notification = {
         "sanitized": True,
         "source": "monday",
@@ -156,6 +173,7 @@ def handle_monday_file_event(
         updated.get("asset_locators"), "state.asset_locators"
     )
     asset_locators[document_type] = asset_locator
+    processed_events[event_ref] = attachment_ref
 
     current_handoff = handoffs[handoff_key]
     if current_handoff.get("status") == "completed":
