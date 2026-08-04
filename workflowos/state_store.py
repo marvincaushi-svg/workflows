@@ -6,13 +6,31 @@ import hashlib
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+
+import fcntl
 
 from .core import WorkflowError
 
 
 STATE_SCHEMA_VERSION = "1.0"
+
+
+@contextmanager
+def lock_automation_state(path: str | Path) -> Iterator[None]:
+    """Serialize state transitions for one case across worker processes."""
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = target.with_name(f".{target.name}.lock")
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    os.fchmod(descriptor, 0o600)
+    with os.fdopen(descriptor, "a+b") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        yield
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def save_automation_state(path: str | Path, state: dict[str, Any]) -> None:
