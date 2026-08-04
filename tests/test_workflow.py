@@ -143,17 +143,27 @@ class WorkflowOSMVPTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkflowError, "source_type must be email"):
             build_case_from_email(self.process, not_email, "pilot-pv-001")
 
-    def test_sb_cannot_be_configured_as_technical_owner(self):
+    def test_process_roles_are_tenant_configurable(self):
         process = copy.deepcopy(self.process)
-        process["process"]["responsibilities"]["technical_document_owner"] = (
-            "sb_energetica"
+        responsibilities = process["process"]["responsibilities"]
+        responsibilities.update(
+            {
+                "assignment_owner": "tenant_sales",
+                "available_project_data_provider": "tenant_engineering_input",
+                "technical_document_owner": "tenant_technical_team",
+                "grid_operator_manager": "tenant_grid_team",
+            }
         )
 
-        with self.assertRaisesRegex(
-            WorkflowError,
-            "technical_document_owner must be af_elektro",
-        ):
-            build_case_from_email(process, self.email, "pilot-pv-invalid-owner")
+        case = build_case_from_email(process, self.email, "tenant-pv-001")
+
+        self.assertEqual(case["assignment_owner_role"], "tenant_sales")
+        self.assertEqual(
+            case["available_project_data_provider_role"],
+            "tenant_engineering_input",
+        )
+        self.assertEqual(case["technical_document_owner_role"], "tenant_technical_team")
+        self.assertEqual(case["grid_operator_manager_role"], "tenant_grid_team")
 
     def test_sb_project_data_cannot_be_made_mandatory(self):
         process = copy.deepcopy(self.process)
@@ -167,7 +177,7 @@ class WorkflowOSMVPTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             WorkflowError,
-            "Only the SB assignment email may be mandatory",
+            "Only the assignment email may be mandatory",
         ):
             build_case_from_email(process, self.email, "pilot-pv-invalid-input")
 
@@ -306,6 +316,39 @@ class WorkflowOSMVPTests(unittest.TestCase):
                 item["assigned_to_role"] == "af_elektro" for item in work_items
             )
         )
+
+    def test_remediation_plan_uses_tenant_role_profile_end_to_end(self):
+        review = load_document(TECHNICAL_REVIEW_PATH)
+        roles = {
+            "assignment_owner": "customer_success",
+            "available_project_data_provider": "project_intake",
+            "technical_document_owner": "engineering",
+            "grid_operator_manager": "permits",
+        }
+        plan = create_remediation_plan(
+            evaluate_technical_review(review),
+            "tenant-pv-001",
+            "2026-08-03T13:00:00Z",
+            role_profile=roles,
+        )
+
+        self.assertEqual(plan["assigned_to_role"], "engineering")
+        self.assertEqual(plan["assignment_source_role"], "customer_success")
+        self.assertEqual(plan["available_project_data_provider_role"], "project_intake")
+        self.assertEqual(plan["grid_operator_manager_role"], "permits")
+        grid_work = next(
+            item
+            for item in plan["work_items"]
+            if item["type"] == "manage_grid_operator_coordination"
+        )
+        self.assertEqual(grid_work["external_counterparty_manager_role"], "permits")
+        handoff = next(
+            item
+            for item in plan["work_items"]
+            if item["type"] == "publish_accepted_documentation_to_sb_monday"
+        )
+        self.assertEqual(handoff["assigned_to_role"], "engineering")
+        self.assertEqual(handoff["delivery_recipient_role"], "customer_success")
 
     def test_grid_operator_is_contacted_directly_by_af(self):
         review = load_document(TECHNICAL_REVIEW_PATH)
