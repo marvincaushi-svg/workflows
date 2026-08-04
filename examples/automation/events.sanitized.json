@@ -1,0 +1,11 @@
+{
+  "events": [
+    {
+      "collector_id": "email.assignment",
+      "event_type": "sb_assignment_received",
+      "case_id": "pilot-pv-001",
+      "event_ref_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "occurred_at": "2026-08-04T05:10:00Z"
+    }
+  ]
+}
