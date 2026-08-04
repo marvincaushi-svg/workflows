@@ -1,0 +1,144 @@
+name: Gmail Monday attachments self-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_send:
+        description: Type SEND-MONDAY-TO-SELF to send one email to Marvin Gmail
+        required: true
+        type: string
+      ia_url:
+        description: Temporary Monday URL for the IA PDF
+        required: true
+        type: string
+      ia_sha256:
+        description: Expected SHA-256 for the IA PDF
+        required: true
+        type: string
+      schema_url:
+        description: Temporary Monday URL for the Schema PDF
+        required: true
+        type: string
+      schema_sha256:
+        description: Expected SHA-256 for the Schema PDF
+        required: true
+        type: string
+      tag_url:
+        description: Temporary Monday URL for the TAG PDF
+        required: true
+        type: string
+      tag_sha256:
+        description: Expected SHA-256 for the TAG PDF
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gmail-monday-attachments-self-test
+  cancel-in-progress: false
+
+jobs:
+  send-one-fixed-gmail:
+    if: ${{ inputs.confirm_send == 'SEND-MONDAY-TO-SELF' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the verified adapter
+        uses: actions/checkout@v4
+
+      - name: Send verified Monday PDFs to Marvin Gmail
+        env:
+          GMAIL_SMTP_PASSWORD: ${{ secrets.GMAIL_SMTP_PASSWORD }}
+          WORKFLOWOS_GMAIL_LIVE_ENABLED: "true"
+          IA_URL: ${{ inputs.ia_url }}
+          IA_SHA256: ${{ inputs.ia_sha256 }}
+          SCHEMA_URL: ${{ inputs.schema_url }}
+          SCHEMA_SHA256: ${{ inputs.schema_sha256 }}
+          TAG_URL: ${{ inputs.tag_url }}
+          TAG_SHA256: ${{ inputs.tag_sha256 }}
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import os
+          import urllib.parse
+          import urllib.request
+
+          from workflowos.gmail_email import GMAIL_ADDRESS, GmailSmtpConfig, GmailSmtpSender
+          from workflowos.hostpoint_email import EmailAttachment
+
+          ALLOWED_HOST = "prod-euc1-files-monday-com.s3.eu-central-1.amazonaws.com"
+          MAX_FILE_BYTES = 10 * 1024 * 1024
+          MAX_TOTAL_BYTES = 20 * 1024 * 1024
+          SPECS = (
+              ("ia", "IA_URL", "IA_SHA256", "IA.pdf", "installation_notice_ia"),
+              ("schema", "SCHEMA_URL", "SCHEMA_SHA256", "Schema.pdf", "single_line_diagram"),
+              ("tag", "TAG_URL", "TAG_SHA256", "TAG.pdf", "tag_grid_connection_application"),
+          )
+
+          attachments: dict[str, EmailAttachment] = {}
+          hashes: list[str] = []
+          document_types: list[str] = []
+          total_bytes = 0
+
+          for locator, url_key, hash_key, filename, document_type in SPECS:
+              url = os.environ.get(url_key, "")
+              expected_hash = os.environ.get(hash_key, "").casefold()
+              parsed = urllib.parse.urlsplit(url)
+              if parsed.scheme != "https" or parsed.hostname != ALLOWED_HOST:
+                  raise SystemExit(f"{locator}: URL must use the approved Monday asset host")
+              if len(expected_hash) != 64 or any(char not in "0123456789abcdef" for char in expected_hash):
+                  raise SystemExit(f"{locator}: invalid SHA-256")
+
+              request = urllib.request.Request(
+                  url,
+                  headers={"User-Agent": "WorkflowOS-Monday-Self-Test/1.0"},
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  content = response.read(MAX_FILE_BYTES + 1)
+              if len(content) > MAX_FILE_BYTES:
+                  raise SystemExit(f"{locator}: file exceeds 10 MB")
+              if not content.startswith(b"%PDF-"):
+                  raise SystemExit(f"{locator}: downloaded content is not a PDF")
+
+              observed_hash = hashlib.sha256(content).hexdigest()
+              if observed_hash != expected_hash:
+                  raise SystemExit(f"{locator}: SHA-256 does not match the Monday file")
+
+              total_bytes += len(content)
+              if total_bytes > MAX_TOTAL_BYTES:
+                  raise SystemExit("Monday attachments exceed the 20 MB email limit")
+
+              attachments[locator] = EmailAttachment(
+                  filename=filename,
+                  content=content,
+                  content_type="application/pdf",
+              )
+              hashes.append(observed_hash)
+              document_types.append(document_type)
+
+          idempotency_key = hashlib.sha256("|".join(hashes).encode("ascii")).hexdigest()
+          email_request = {
+              "source": "workflowos",
+              "from_organization_role": "af_elektro",
+              "recipient_email": GMAIL_ADDRESS,
+              "case_id": "monday-attachment-self-test",
+              "template": "accepted_grid_documents",
+              "attachment_document_types": document_types,
+              "attachment_locators": list(attachments),
+              "attachment_refs_sha256": hashes,
+              "idempotency_key": idempotency_key,
+          }
+
+          sender = GmailSmtpSender(
+              GmailSmtpConfig.from_environment(),
+              lambda locator: attachments[locator],
+          )
+          result = sender(email_request)
+          if result.get("delivery_status") != "sent" or result.get("recipient_email") != GMAIL_ADDRESS:
+              raise SystemExit("Gmail did not confirm the fixed self-test delivery")
+          print("Gmail accepted one self-test email with 3 verified Monday PDF attachments.")
+          PY
