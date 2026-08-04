@@ -142,6 +142,11 @@ def handle_monday_file_event(
         "source": "monday",
         "event_type": "document_uploaded",
         "document_type": document_type,
+        "verification_case_id": verification.get("case_id"),
+        "verification_document_type": verification.get("document_type"),
+        "verification_attachment_ref_sha256": verification.get(
+            "attachment_ref_sha256"
+        ),
         "content_verified": verification.get("content_verified"),
         "latest_version": verification.get("latest_version"),
         "identity_extraction_verified": verification.get(
