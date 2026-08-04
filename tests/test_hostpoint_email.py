@@ -132,13 +132,84 @@ class WorkflowOSHostpointEmailTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkflowError, "LIVE_ENABLED=true"):
             HostpointSmtpConfig.from_environment(base)
 
-        wrong_sender = {
+        mismatched_sender = {
             **base,
             "WORKFLOWOS_SMTP_LIVE_ENABLED": "true",
             "WORKFLOWOS_SMTP_USERNAME": "marvin.caushi@gmail.com",
+            "WORKFLOWOS_SMTP_FROM": AF_SMTP_ADDRESS,
         }
-        with self.assertRaisesRegex(WorkflowError, "username must be"):
-            HostpointSmtpConfig.from_environment(wrong_sender)
+        with self.assertRaisesRegex(WorkflowError, "match the authenticated account"):
+            HostpointSmtpConfig.from_environment(mismatched_sender)
+
+    def test_supports_a_different_tenant_without_changing_product_code(self):
+        config = HostpointSmtpConfig(
+            username="automation@example.com",
+            password="tenant-secret",
+            from_address="automation@example.com",
+            from_name="Example Operations AG",
+            organization_role="tenant_operations",
+        )
+        request = {
+            **self.request,
+            "from_organization_role": "tenant_operations",
+        }
+        sender = HostpointSmtpSender(
+            config,
+            lambda locator: EmailAttachment(
+                filename="Safety-report.pdf",
+                content=self.content,
+            ),
+            smtp_factory=self.smtp_factory,
+        )
+
+        confirmation = sender(request)
+
+        connection = self.connections[0]
+        self.assertEqual(
+            connection.login_args,
+            ("automation@example.com", "tenant-secret"),
+        )
+        self.assertEqual(
+            connection.send_args,
+            ("automation@example.com", [request["recipient_email"]]),
+        )
+        self.assertIn(
+            "Example Operations AG",
+            connection.message.get_body(preferencelist=("plain",)).get_content(),
+        )
+        self.assertEqual(confirmation["delivery_status"], "sent")
+
+    def test_request_role_must_match_tenant_config(self):
+        request = {**self.request, "from_organization_role": "other_tenant"}
+
+        with self.assertRaisesRegex(WorkflowError, "tenant config"):
+            self.sender()(request)
+
+        self.assertEqual(self.connections, [])
+
+    def test_duplicate_reference_is_blocked_before_smtp(self):
+        request = {
+            **self.request,
+            "attachment_locators": ["monday-asset-1", "monday-asset-2"],
+            "attachment_refs_sha256": [self.attachment_ref, self.attachment_ref],
+        }
+
+        with self.assertRaisesRegex(WorkflowError, "Duplicate Monday attachment"):
+            self.sender()(request)
+
+        self.assertEqual(self.connections, [])
+
+    def test_total_size_over_20_mb_is_blocked_before_smtp(self):
+        content = b"x" * (20 * 1024 * 1024 + 1)
+        request = {
+            **self.request,
+            "attachment_refs_sha256": [hashlib.sha256(content).hexdigest()],
+        }
+
+        with self.assertRaisesRegex(WorkflowError, "20 MB"):
+            self.sender(content=content)(request)
+
+        self.assertEqual(self.connections, [])
 
     def test_connection_check_authenticates_without_creating_email(self):
         result = check_hostpoint_connection(
