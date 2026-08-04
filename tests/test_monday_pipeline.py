@@ -14,7 +14,11 @@ from workflowos.monday_assets import (
     MondayReadOnlyCollector,
     MondayReadOnlyConfig,
 )
-from workflowos.monday_pipeline import DurableMondayEmailPipeline, MondayFileChange
+from workflowos.monday_pipeline import (
+    DeliveryReconciliation,
+    DurableMondayEmailPipeline,
+    MondayFileChange,
+)
 from workflowos.state_store import load_automation_state, save_automation_state
 from workflowos.technical_review import create_remediation_plan, evaluate_technical_review
 
@@ -181,6 +185,43 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
             "document_identity": copy.deepcopy(self.identity),
         }
 
+    def create_uncertain_delivery(self):
+        calls = []
+
+        def uncertain_sender(request):
+            calls.append(request)
+            raise OSError("connection dropped after DATA")
+
+        pipeline = DurableMondayEmailPipeline(
+            self.collector,
+            self.automation_config,
+            email_sender=uncertain_sender,
+        )
+        for column in ("file_tag", "file_ia"):
+            pipeline.process(
+                self.state_path,
+                MondayFileChange(
+                    item_id=ITEM_ID,
+                    case_id="pilot-pv-001",
+                    column_id=column,
+                ),
+                self.verification(column),
+            )
+        with self.assertRaisesRegex(WorkflowError, "manual reconciliation"):
+            pipeline.process(
+                self.state_path,
+                MondayFileChange(
+                    item_id=ITEM_ID,
+                    case_id="pilot-pv-001",
+                    column_id="file_schema",
+                    grid_operator_practices_accepted=True,
+                ),
+                self.verification("file_schema"),
+            )
+        state = load_automation_state(self.state_path)
+        idempotency_key = next(iter(state["delivery_outbox"]))
+        return pipeline, calls, idempotency_key
+
     def test_full_monday_to_verified_gmail_path_sends_one_three_pdf_message(self):
         outcome = None
         for index, column in enumerate(("file_tag", "file_ia", "file_schema")):
@@ -225,40 +266,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
         self.assertEqual(self.graphql_calls, [])
 
     def test_uncertain_delivery_is_persisted_and_never_retried_automatically(self):
-        calls = []
-
-        def uncertain_sender(request):
-            calls.append(request)
-            raise OSError("connection dropped after DATA")
-
-        pipeline = DurableMondayEmailPipeline(
-            self.collector,
-            self.automation_config,
-            email_sender=uncertain_sender,
-        )
-        for index, column in enumerate(("file_tag", "file_ia")):
-            pipeline.process(
-                self.state_path,
-                MondayFileChange(
-                    item_id=ITEM_ID,
-                    case_id="pilot-pv-001",
-                    column_id=column,
-                    grid_operator_practices_accepted=False,
-                ),
-                self.verification(column),
-            )
-
-        with self.assertRaisesRegex(WorkflowError, "manual reconciliation"):
-            pipeline.process(
-                self.state_path,
-                MondayFileChange(
-                    item_id=ITEM_ID,
-                    case_id="pilot-pv-001",
-                    column_id="file_schema",
-                    grid_operator_practices_accepted=True,
-                ),
-                self.verification("file_schema"),
-            )
+        pipeline, calls, _ = self.create_uncertain_delivery()
 
         before_retry_calls = len(self.graphql_calls)
         blocked = pipeline.process(
@@ -279,6 +287,91 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
         persisted = load_automation_state(self.state_path)
         self.assertEqual(
             list(persisted["delivery_outbox"].values())[0]["status"],
+            "delivery_in_doubt",
+        )
+        self.assertNotIn("https://", str(persisted["delivery_outbox"]))
+
+    def test_confirmed_delivery_reconciliation_completes_without_resending(self):
+        pipeline, calls, idempotency_key = self.create_uncertain_delivery()
+        monday_calls = len(self.graphql_calls)
+        outcome = pipeline.reconcile_delivery(
+            self.state_path,
+            DeliveryReconciliation(
+                idempotency_key=idempotency_key,
+                outcome="confirmed_sent",
+                checked_at="2026-08-05T00:30:00+02:00",
+                checked_by_ref="operator-ref-001",
+                evidence_ref_sha256="e" * 64,
+                message_ref_sha256="f" * 64,
+            ),
+        )
+
+        self.assertEqual(outcome["result"]["status"], "completed_reconciled")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(FakeSmtp.sent_messages), 0)
+        self.assertEqual(len(self.graphql_calls), monday_calls)
+        entry = next(iter(outcome["state"]["delivery_outbox"].values()))
+        self.assertEqual(entry["status"], "sent")
+        self.assertNotIn("email_request", entry)
+        self.assertEqual(
+            outcome["state"]["handoffs"]["accepted_practices"][
+                "email_delivery"
+            ]["status"],
+            "sent",
+        )
+
+    def test_confirmed_non_delivery_allows_one_explicit_verified_retry(self):
+        pipeline, calls, idempotency_key = self.create_uncertain_delivery()
+        reconciled = pipeline.reconcile_delivery(
+            self.state_path,
+            DeliveryReconciliation(
+                idempotency_key=idempotency_key,
+                outcome="confirmed_not_sent",
+                checked_at="2026-08-05T00:30:00+02:00",
+                checked_by_ref="operator-ref-001",
+                evidence_ref_sha256="d" * 64,
+            ),
+        )
+        self.assertEqual(reconciled["result"]["status"], "retry_authorized")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(FakeSmtp.sent_messages), 0)
+
+        retried = self.pipeline.retry_authorized_delivery(
+            self.state_path, idempotency_key
+        )
+        self.assertEqual(retried["result"]["status"], "completed")
+        self.assertEqual(len(FakeSmtp.sent_messages), 1)
+        self.assertEqual(
+            next(iter(retried["state"]["delivery_outbox"].values()))["status"],
+            "sent",
+        )
+        with self.assertRaisesRegex(WorkflowError, "has not been authorized"):
+            self.pipeline.retry_authorized_delivery(
+                self.state_path, idempotency_key
+            )
+
+    def test_tampered_persisted_request_cannot_be_authorized_for_retry(self):
+        pipeline, _, idempotency_key = self.create_uncertain_delivery()
+        state = load_automation_state(self.state_path)
+        state["delivery_outbox"][idempotency_key]["email_request"][
+            "recipient_email"
+        ] = "other@example.invalid"
+        save_automation_state(self.state_path, state)
+
+        with self.assertRaisesRegex(WorkflowError, "request checksum"):
+            pipeline.reconcile_delivery(
+                self.state_path,
+                DeliveryReconciliation(
+                    idempotency_key=idempotency_key,
+                    outcome="confirmed_not_sent",
+                    checked_at="2026-08-05T00:30:00+02:00",
+                    checked_by_ref="operator-ref-001",
+                    evidence_ref_sha256="c" * 64,
+                ),
+            )
+        persisted = load_automation_state(self.state_path)
+        self.assertEqual(
+            persisted["delivery_outbox"][idempotency_key]["status"],
             "delivery_in_doubt",
         )
 
