@@ -1,0 +1,57 @@
+name: Gmail SMTP self-email test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/gmail-self-email-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send-one-fixed-gmail:
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'opened' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send one fixed email from and to Marvin Gmail
+        env:
+          GMAIL_SMTP_PASSWORD: ${{ secrets.GMAIL_SMTP_PASSWORD }}
+        run: |
+          python - <<'PY'
+          import os
+          import smtplib
+          import ssl
+          from email.message import EmailMessage
+
+          address = "marvin.caushi@gmail.com"
+          password = os.environ.get("GMAIL_SMTP_PASSWORD", "")
+          if not password:
+              raise SystemExit("GMAIL_SMTP_PASSWORD is missing")
+
+          message = EmailMessage()
+          message["From"] = address
+          message["To"] = address
+          message["Subject"] = "Test WorkflowOS – collegamento Gmail"
+          message["X-WorkflowOS-Test"] = "gmail-self-test"
+          message.set_content(
+              "Questa è una email di prova inviata da WorkflowOS tramite Gmail.\n\n"
+              "Mittente e destinatario: marvin.caushi@gmail.com\n"
+              "Nessun documento cliente è stato allegato.\n"
+          )
+
+          with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
+              smtp.ehlo()
+              smtp.starttls(context=ssl.create_default_context())
+              smtp.ehlo()
+              smtp.login(address, password)
+              refused = smtp.send_message(
+                  message,
+                  from_addr=address,
+                  to_addrs=[address],
+              )
+          if refused:
+              raise SystemExit("Gmail refused the fixed self-test recipient")
+          print("Gmail accepted one fixed self-test email.")
+          PY
