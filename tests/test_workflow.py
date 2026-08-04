@@ -79,11 +79,15 @@ class WorkflowOSMVPTests(unittest.TestCase):
         identity=None,
         grid_operator_practices_accepted=False,
     ):
+        attachment_ref = f"{index + 100:064x}"
         return {
             "sanitized": True,
             "source": "monday",
             "event_type": "document_uploaded",
             "document_type": document_type,
+            "verification_case_id": "pilot-pv-001",
+            "verification_document_type": document_type,
+            "verification_attachment_ref_sha256": attachment_ref,
             "content_verified": True,
             "latest_version": True,
             "identity_extraction_verified": True,
@@ -92,7 +96,7 @@ class WorkflowOSMVPTests(unittest.TestCase):
                 grid_operator_practices_accepted
             ),
             "event_ref_sha256": f"{index:064x}",
-            "attachment_ref_sha256": f"{index + 100:064x}",
+            "attachment_ref_sha256": attachment_ref,
         }
 
     def test_real_sanitized_email_reaches_ready_after_content_verification(self):
@@ -689,6 +693,9 @@ class WorkflowOSMVPTests(unittest.TestCase):
             "source": "monday",
             "event_type": "document_uploaded",
             "document_type": "safety_report_rasi_sina",
+            "verification_case_id": "pilot-pv-001",
+            "verification_document_type": "safety_report_rasi_sina",
+            "verification_attachment_ref_sha256": "e" * 64,
             "content_verified": True,
             "latest_version": True,
             "identity_extraction_verified": True,
@@ -728,6 +735,9 @@ class WorkflowOSMVPTests(unittest.TestCase):
             "source": "monday",
             "event_type": "document_uploaded",
             "document_type": "safety_report_rasi_sina",
+            "verification_case_id": "pilot-pv-001",
+            "verification_document_type": "safety_report_rasi_sina",
+            "verification_attachment_ref_sha256": "c" * 64,
             "content_verified": True,
             "latest_version": True,
             "identity_extraction_verified": True,

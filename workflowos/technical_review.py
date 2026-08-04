@@ -501,6 +501,22 @@ def record_monday_document_notification(
     )
     if document_type not in required_documents:
         raise WorkflowError(f"Unsupported SB handoff document: {document_type}")
+    case_context = _require_mapping(handoff.get("case_context"), "case_context")
+    case_id = _require_string(case_context.get("case_id"), "case_context.case_id")
+    verification_case_id = _require_string(
+        notification.get("verification_case_id"),
+        "notification.verification_case_id",
+    )
+    if verification_case_id != case_id:
+        raise WorkflowError("Document verification belongs to a different case")
+    verification_document_type = _require_string(
+        notification.get("verification_document_type"),
+        "notification.verification_document_type",
+    )
+    if verification_document_type != document_type:
+        raise WorkflowError(
+            "Document verification belongs to a different document type"
+        )
     if notification.get("content_verified") is not True:
         raise WorkflowError("Monday upload must be content_verified before handoff")
     if notification.get("latest_version") is not True:
@@ -539,6 +555,17 @@ def record_monday_document_notification(
         raise WorkflowError(
             "notification.attachment_ref_sha256 must be a lowercase SHA-256 digest"
         )
+    verification_attachment_ref = _require_string(
+        notification.get("verification_attachment_ref_sha256"),
+        "notification.verification_attachment_ref_sha256",
+    )
+    if not SHA256_RE.fullmatch(verification_attachment_ref):
+        raise WorkflowError(
+            "notification.verification_attachment_ref_sha256 must be a lowercase "
+            "SHA-256 digest"
+        )
+    if verification_attachment_ref != attachment_ref:
+        raise WorkflowError("Document verification belongs to a different attachment")
 
     updated = copy.deepcopy(handoff)
     notification_refs = _require_list(
@@ -563,6 +590,9 @@ def record_monday_document_notification(
     matching[0]["status"] = "uploaded_to_monday"
     matching[0]["document_identity"] = copy.deepcopy(document_identity)
     matching[0]["attachment_ref_sha256"] = attachment_ref
+    matching[0][
+        "verification_attachment_ref_sha256"
+    ] = verification_attachment_ref
     notification_refs.append(event_ref)
     updated[gate_field] = bool(updated.get(gate_field) or gate_value)
 

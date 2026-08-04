@@ -167,8 +167,13 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
     def tearDown(self):
         self.tempdir.cleanup()
 
-    def verification(self):
+    def verification(self, column):
         return {
+            "case_id": "pilot-pv-001",
+            "document_type": COLUMNS[column],
+            "attachment_ref_sha256": hashlib.sha256(
+                self.contents[column]
+            ).hexdigest(),
             "content_verified": True,
             "latest_version": True,
             "identity_extraction_verified": True,
@@ -187,7 +192,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
                     column_id=column,
                     grid_operator_practices_accepted=index == 2,
                 ),
-                self.verification(),
+                self.verification(column),
             )
 
         self.assertEqual(outcome["result"]["status"], "completed")
@@ -240,7 +245,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
                     column_id=column,
                     grid_operator_practices_accepted=False,
                 ),
-                self.verification(),
+                self.verification(column),
             )
 
         with self.assertRaisesRegex(WorkflowError, "manual reconciliation"):
@@ -252,7 +257,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
                     column_id="file_schema",
                     grid_operator_practices_accepted=True,
                 ),
-                self.verification(),
+                self.verification("file_schema"),
             )
 
         before_retry_calls = len(self.graphql_calls)
@@ -264,7 +269,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
                 column_id="file_schema",
                 grid_operator_practices_accepted=True,
             ),
-            self.verification(),
+            self.verification("file_schema"),
         )
         self.assertEqual(
             blocked["result"]["status"], "blocked_delivery_reconciliation"
