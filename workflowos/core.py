@@ -19,7 +19,7 @@ KNOWN_CLASSIFICATIONS = ACCEPTED_CLASSIFICATIONS | {
 }
 SB_ASSIGNMENT_OWNER_ROLE = "sb_energetica"
 AF_TECHNICAL_OWNER_ROLE = "af_elektro"
-AF_TECHNICAL_DELIVERABLES = (
+DEFAULT_TECHNICAL_DELIVERABLES = (
     "tag_grid_connection_application",
     "installation_notice_ia",
     "single_line_diagram",
@@ -96,32 +96,25 @@ def validate_process(document: dict[str, Any]) -> dict[str, Any]:
     responsibilities = _require_mapping(
         process.get("responsibilities"), "process.responsibilities"
     )
-    expected_roles = {
-        "assignment_owner": SB_ASSIGNMENT_OWNER_ROLE,
-        "available_project_data_provider": SB_ASSIGNMENT_OWNER_ROLE,
-        "technical_document_owner": AF_TECHNICAL_OWNER_ROLE,
-        "grid_operator_manager": AF_TECHNICAL_OWNER_ROLE,
-    }
-    for field, expected_role in expected_roles.items():
-        observed_role = _require_string(
-            responsibilities.get(field), f"process.responsibilities.{field}"
-        )
-        if observed_role != expected_role:
-            raise WorkflowError(
-                f"process.responsibilities.{field} must be {expected_role}"
-            )
+    for field in (
+        "assignment_owner",
+        "available_project_data_provider",
+        "technical_document_owner",
+        "grid_operator_manager",
+    ):
+        _require_string(responsibilities.get(field), f"process.responsibilities.{field}")
     deliverables = [
-        _require_string(value, f"process.responsibilities.af_elektro_deliverables[{index}]")
+        _require_string(value, f"process.responsibilities.technical_deliverables[{index}]")
         for index, value in enumerate(
             _require_list(
-                responsibilities.get("af_elektro_deliverables"),
-                "process.responsibilities.af_elektro_deliverables",
+                responsibilities.get("technical_deliverables"),
+                "process.responsibilities.technical_deliverables",
             )
         )
     ]
-    if tuple(deliverables) != AF_TECHNICAL_DELIVERABLES:
+    if tuple(deliverables) != DEFAULT_TECHNICAL_DELIVERABLES:
         raise WorkflowError(
-            "process.responsibilities.af_elektro_deliverables must contain TAG, IA, "
+            "process.responsibilities.technical_deliverables must contain TAG, IA, "
             "single-line diagram and system sizing"
         )
 
@@ -136,7 +129,7 @@ def validate_process(document: dict[str, Any]) -> dict[str, Any]:
     )
     if project_data_policy != "accept_available_without_making_it_mandatory":
         raise WorkflowError(
-            "SB project data must remain optional input for A&F technical production"
+            "Source project data must remain optional input for technical production"
         )
 
     checklist = _require_mapping(process.get("checklist"), "process.checklist")
@@ -168,7 +161,7 @@ def validate_process(document: dict[str, Any]) -> dict[str, Any]:
         artifact_types.add(artifact_type)
     if artifact_types != {"assignment_email"}:
         raise WorkflowError(
-            "Only the SB assignment email may be mandatory at assignment intake"
+            "Only the assignment email may be mandatory at assignment intake"
         )
 
     fact_paths: set[str] = set()
