@@ -178,8 +178,28 @@ class WorkflowOSAutomationTests(unittest.TestCase):
         )
 
         self.assertEqual(outcome["result"]["status"], "completed")
-        self.assertEqual(repeated["result"]["status"], "already_completed")
+        self.assertEqual(repeated["result"]["status"], "ignored_duplicate_event")
         self.assertEqual(len(calls), 1)
+
+    def test_duplicate_event_with_changed_attachment_is_rejected_without_mutation(self):
+        first = handle_monday_file_event(
+            self.state,
+            self.event("tag-column", 1),
+            self.verification(),
+            self.config,
+        )
+        conflicting = self.event("tag-column", 1)
+        conflicting["attachment_ref_sha256"] = "e" * 64
+
+        with self.assertRaisesRegex(WorkflowError, "different attachment"):
+            handle_monday_file_event(
+                first["state"], conflicting, self.verification(), self.config
+            )
+
+        self.assertEqual(
+            first["state"]["asset_locators"]["tag_grid_connection_application"],
+            "monday-asset-1",
+        )
 
     def test_mismatched_document_blocks_email_adapter(self):
         calls = []
