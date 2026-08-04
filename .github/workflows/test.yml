@@ -17,6 +17,19 @@ jobs:
           python-version: "3.12"
       - name: Run unit and end-to-end tests
         run: python -m unittest discover -s tests -v
+      - name: Validate unified automation catalog
+        run: |
+          python -m workflowos.cli validate-automation-catalog \
+            --catalog automation.catalog.json
+          python -m workflowos.cli plan-automation-schedule \
+            --catalog automation.catalog.json \
+            --at 2026-08-04T05:00:00Z
+          python -m workflowos.cli automation-health \
+            --catalog automation.catalog.json \
+            --at 2026-08-04T05:00:00Z
+          python -m workflowos.cli resolve-message-language \
+            --catalog automation.catalog.json \
+            --recipient info@elektro-af.ch
       - name: Exercise the pilot path
         run: |
           python -m workflowos.cli run \
