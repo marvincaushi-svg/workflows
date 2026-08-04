@@ -2,6 +2,16 @@
 
 from .automation import handle_monday_file_event, initialize_automation_state
 from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
+from .control_plane import (
+    AutomationCatalogError,
+    build_event_execution_plan,
+    build_health_report,
+    build_schedule_execution_plan,
+    normalize_runtime_state,
+    record_execution_outcome,
+    resolve_communication_policy,
+    validate_automation_catalog,
+)
 from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
 from .hostpoint_email import (
     EmailAttachment,
@@ -19,26 +29,34 @@ from .technical_review import (
 )
 
 __all__ = [
+    "AutomationCatalogError",
+    "EmailAttachment",
+    "HostpointSmtpConfig",
+    "HostpointSmtpSender",
     "WorkflowError",
     "build_audit_log",
     "build_case_from_email",
+    "build_event_execution_plan",
+    "build_health_report",
+    "build_schedule_execution_plan",
     "check_hostpoint_connection",
     "configure_sb_document_handoff",
-    "create_remediation_work",
     "create_remediation_plan",
+    "create_remediation_work",
     "evaluate_case",
     "evaluate_technical_review",
-    "EmailAttachment",
     "handle_monday_file_event",
-    "HostpointSmtpConfig",
-    "HostpointSmtpSender",
     "initialize_automation_state",
+    "load_document",
+    "normalize_runtime_state",
+    "read_audit_log",
+    "record_execution_outcome",
     "record_monday_document_notification",
     "record_sb_email_delivery",
-    "load_document",
-    "read_audit_log",
+    "resolve_communication_policy",
+    "validate_automation_catalog",
     "verify_audit_log",
     "write_audit_log",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
