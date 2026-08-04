@@ -18,7 +18,7 @@ from .hostpoint_email import AttachmentLoader, EmailAttachment, SmtpFactory, _st
 
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_STARTTLS_PORT = 587
-GMAIL_ADDRESS = "marvin.caushi@gmail.com"
+DEFAULT_GMAIL_ADDRESS = "marvin.caushi@gmail.com"
 MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024
 SUPPORTED_TEMPLATES = {"accepted_grid_documents", "signed_safety_report"}
 
@@ -28,9 +28,10 @@ class GmailSmtpConfig:
     """Validated Gmail settings; the app password is hidden from repr."""
 
     password: str = field(repr=False)
-    username: str = GMAIL_ADDRESS
-    from_address: str = GMAIL_ADDRESS
+    username: str = DEFAULT_GMAIL_ADDRESS
+    from_address: str = DEFAULT_GMAIL_ADDRESS
     from_name: str = "A&F Elektro GmbH"
+    organization_role: str = "af_elektro"
     host: str = GMAIL_SMTP_HOST
     port: int = GMAIL_SMTP_STARTTLS_PORT
     timeout_seconds: float = 30.0
@@ -38,14 +39,18 @@ class GmailSmtpConfig:
     def __post_init__(self) -> None:
         if self.host != GMAIL_SMTP_HOST or self.port != GMAIL_SMTP_STARTTLS_PORT:
             raise WorkflowError("Gmail SMTP must use smtp.gmail.com STARTTLS on port 587")
-        if self.username.casefold() != GMAIL_ADDRESS:
-            raise WorkflowError("Gmail SMTP username must be marvin.caushi@gmail.com")
-        if self.from_address.casefold() != GMAIL_ADDRESS:
-            raise WorkflowError("Gmail SMTP sender must be marvin.caushi@gmail.com")
+        if "@" not in self.username or any(char in self.username for char in "\r\n"):
+            raise WorkflowError("Gmail SMTP username must be a valid email address")
+        if self.from_address.casefold() != self.username.casefold():
+            raise WorkflowError("Gmail SMTP sender must match the authenticated account")
         if not self.password:
             raise WorkflowError("Gmail app password is required")
-        if not self.from_name.strip() or self.timeout_seconds <= 0:
-            raise WorkflowError("Gmail sender name and positive timeout are required")
+        if not self.from_name.strip() or not self.organization_role.strip():
+            raise WorkflowError("Gmail sender name and organization role are required")
+        if any(char in self.from_name for char in "\r\n"):
+            raise WorkflowError("Gmail sender name is invalid")
+        if self.timeout_seconds <= 0:
+            raise WorkflowError("Gmail timeout must be positive")
 
     @classmethod
     def from_environment(
@@ -66,9 +71,12 @@ class GmailSmtpConfig:
             raise WorkflowError("WORKFLOWOS_GMAIL_TIMEOUT_SECONDS must be numeric") from exc
         return cls(
             password=values.get("GMAIL_SMTP_PASSWORD", ""),
-            username=values.get("WORKFLOWOS_GMAIL_USERNAME", GMAIL_ADDRESS),
-            from_address=values.get("WORKFLOWOS_GMAIL_FROM", GMAIL_ADDRESS),
+            username=values.get("WORKFLOWOS_GMAIL_USERNAME", DEFAULT_GMAIL_ADDRESS),
+            from_address=values.get("WORKFLOWOS_GMAIL_FROM", DEFAULT_GMAIL_ADDRESS),
             from_name=values.get("WORKFLOWOS_GMAIL_FROM_NAME", "A&F Elektro GmbH"),
+            organization_role=values.get(
+                "WORKFLOWOS_ORGANIZATION_ROLE", "af_elektro"
+            ),
             host=values.get("WORKFLOWOS_GMAIL_HOST", GMAIL_SMTP_HOST),
             port=int(values.get("WORKFLOWOS_GMAIL_PORT", str(GMAIL_SMTP_STARTTLS_PORT))),
             timeout_seconds=timeout,
@@ -120,8 +128,8 @@ class GmailSmtpSender:
     def _build_message(self, request: dict[str, Any]) -> tuple[EmailMessage, str]:
         if request.get("source") != "workflowos":
             raise WorkflowError("SMTP request source must be workflowos")
-        if request.get("from_organization_role") != "af_elektro":
-            raise WorkflowError("SMTP request sender role must be af_elektro")
+        if request.get("from_organization_role") != self._config.organization_role:
+            raise WorkflowError("SMTP request sender role does not match tenant config")
 
         recipient = _require_string(
             request.get("recipient_email"), "email_request.recipient_email"
@@ -175,7 +183,7 @@ class GmailSmtpSender:
                 raise WorkflowError("Monday attachments exceed the 20 MB email limit")
             attachments.append(attachment)
 
-        subject, body = _render_template(template, case_id)
+        subject, body = _render_template(template, case_id, self._config.from_name)
         message = EmailMessage()
         message["From"] = formataddr((self._config.from_name, self._config.from_address))
         message["To"] = recipient
@@ -194,15 +202,15 @@ class GmailSmtpSender:
         return message, recipient
 
 
-def _render_template(template: str, case_id: str) -> tuple[str, str]:
+def _render_template(template: str, case_id: str, organization_name: str) -> tuple[str, str]:
     if template == "accepted_grid_documents":
         return (
             f"Documentazione pratica accettata – {case_id}",
             "Buongiorno,\n\nin allegato trasmettiamo TAG, IA e schema relativi "
-            f"alla commessa {case_id}.\n\nCordiali saluti\nA&F Elektro GmbH\n",
+            f"alla commessa {case_id}.\n\nCordiali saluti\n{organization_name}\n",
         )
     return (
         f"RaSi/SiNa impianto ultimato – {case_id}",
         "Buongiorno,\n\nin allegato trasmettiamo il RaSi/SiNa firmato relativo "
-        f"alla commessa {case_id}.\n\nCordiali saluti\nA&F Elektro GmbH\n",
+        f"alla commessa {case_id}.\n\nCordiali saluti\n{organization_name}\n",
     )
