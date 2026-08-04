@@ -35,6 +35,8 @@ Dopo l'ultimazione dell'installazione viene applicato lo stesso controllo al RaS
 
 Il modulo `workflowos.automation` collega questi controlli agli eventi delle colonne file di Monday. L'associazione tra ID delle colonne e tipo di documento è configurabile e non contiene identificativi della bacheca nel repository pubblico. Il runtime parte in modalità `test`: costruisce la richiesta email completa ma non chiama mai l'adapter di invio. La modalità `live` richiede sia `mode=live` sia l'interruttore separato `allow_external_email=true`; senza entrambi l'invio viene rifiutato. Gli eventi duplicati, le colonne estranee e le commesse provenienti da una bacheca diversa non possono generare email.
 
+Il raccoglitore `workflowos.monday_assets` interroga Monday esclusivamente con una query in sola lettura. Bacheca e colonne provengono dal profilo del tenant; un file viene accettato soltanto se appartiene esattamente all'item, alla colonna e all'asset indicati. Più file nella stessa colonna richiedono l'ID dell'asset ricevuto dall'evento, così la selezione non viene mai dedotta dal nome. Il raccoglitore ammette solo PDF, host configurati e file fino a 10 MB; controlla anche dimensione dichiarata, dimensione scaricata e firma `%PDF-`. Gli URL temporanei Monday non vengono conservati nello stato: l'adapter riceve un locator stabile e risolve nuovamente l'asset prima dell'invio, mentre l'hash SHA-256 finale resta verificato dall'adapter email.
+
 L'adapter `workflowos.hostpoint_email` collega un account aziendale Hostpoint tramite SMTP STARTTLS. Account, mittente, nome aziendale e ruolo provengono dalla configurazione del tenant; il mittente deve coincidere con l'account autenticato. L'adapter verifica nuovamente l'hash SHA-256 di ogni allegato scaricato da Monday, blocca duplicati e invii oltre 20 MB e registra la consegna soltanto dopo l'accettazione del server SMTP. Il provider resta fissato a `asmtp.mail.hostpoint.ch:587`; la password viene letta dall'ambiente e non deve essere inserita nel repository. A&F è soltanto il profilo pilota predefinito.
 
 ### Configurazione Hostpoint locale
@@ -113,6 +115,7 @@ I test coprono:
 - invio automatico idempotente dopo il controllo documentale;
 - invio del RaSi/SiNa firmato soltanto dopo l'ultimazione dell'impianto.
 - runtime Monday in modalità test senza invii esterni;
+- raccoglitore Monday in sola lettura con associazione esatta item/colonna/asset e senza persistenza degli URL temporanei;
 - interruttore esplicito per l'email reale e blocco delle duplicazioni.
 - adapter SMTP Hostpoint configurabile per tenant, con STARTTLS, identità autenticata coincidente, controllo hash, duplicati e limite allegati di 20 MB.
 - adapter Gmail configurabile per tenant, con mittente autenticato coincidente, firma aziendale e ruolo verificato.

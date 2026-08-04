@@ -9,6 +9,7 @@ from .hostpoint_email import (
     HostpointSmtpSender,
     check_hostpoint_connection,
 )
+from .monday_assets import MondayReadOnlyCollector, MondayReadOnlyConfig
 from .technical_review import (
     configure_sb_document_handoff,
     create_remediation_plan,
@@ -33,6 +34,8 @@ __all__ = [
     "HostpointSmtpConfig",
     "HostpointSmtpSender",
     "initialize_automation_state",
+    "MondayReadOnlyCollector",
+    "MondayReadOnlyConfig",
     "record_monday_document_notification",
     "record_sb_email_delivery",
     "load_document",
