@@ -185,6 +185,14 @@ class MondayReadOnlyCollector:
         self._graphql_transport = graphql_transport or self._post_graphql
         self._download_transport = download_transport or self._download
 
+    def tenant_binding(self) -> dict[str, Any]:
+        """Return the non-secret board/column binding used by the collector."""
+
+        return {
+            "expected_board_id": self._config.expected_board_id,
+            "document_columns": dict(self._config.document_columns),
+        }
+
     def collect_file_event(
         self,
         *,
