@@ -67,7 +67,11 @@ jobs:
           import urllib.parse
           import urllib.request
 
-          from workflowos.gmail_email import GMAIL_ADDRESS, GmailSmtpConfig, GmailSmtpSender
+          from workflowos.gmail_email import (
+              DEFAULT_GMAIL_ADDRESS,
+              GmailSmtpConfig,
+              GmailSmtpSender,
+          )
           from workflowos.hostpoint_email import EmailAttachment
 
           ALLOWED_HOST = "prod-euc1-files-monday-com.s3.eu-central-1.amazonaws.com"
@@ -124,7 +128,7 @@ jobs:
           email_request = {
               "source": "workflowos",
               "from_organization_role": "af_elektro",
-              "recipient_email": GMAIL_ADDRESS,
+              "recipient_email": DEFAULT_GMAIL_ADDRESS,
               "case_id": "monday-attachment-self-test",
               "template": "accepted_grid_documents",
               "attachment_document_types": document_types,
@@ -138,7 +142,10 @@ jobs:
               lambda locator: attachments[locator],
           )
           result = sender(email_request)
-          if result.get("delivery_status") != "sent" or result.get("recipient_email") != GMAIL_ADDRESS:
+          if (
+              result.get("delivery_status") != "sent"
+              or result.get("recipient_email") != DEFAULT_GMAIL_ADDRESS
+          ):
               raise SystemExit("Gmail did not confirm the fixed self-test delivery")
           print("Gmail accepted one self-test email with 3 verified Monday PDF attachments.")
           PY
