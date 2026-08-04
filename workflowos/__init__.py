@@ -10,7 +10,11 @@ from .hostpoint_email import (
     check_hostpoint_connection,
 )
 from .monday_assets import MondayReadOnlyCollector, MondayReadOnlyConfig
-from .monday_pipeline import DurableMondayEmailPipeline, MondayFileChange
+from .monday_pipeline import (
+    DeliveryReconciliation,
+    DurableMondayEmailPipeline,
+    MondayFileChange,
+)
 from .technical_review import (
     configure_sb_document_handoff,
     create_remediation_plan,
@@ -38,6 +42,7 @@ __all__ = [
     "MondayReadOnlyCollector",
     "MondayReadOnlyConfig",
     "DurableMondayEmailPipeline",
+    "DeliveryReconciliation",
     "MondayFileChange",
     "record_monday_document_notification",
     "record_sb_email_delivery",
