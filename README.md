@@ -4,6 +4,13 @@
 
 WorkflowOS governa decisioni, processi, persone, AI e dati attraverso un sistema modulare, verificabile e adattabile, rendendo possibile ciò che oggi è troppo complesso da gestire.
 
+A&F Elektro è il primo tenant pilota, non un vincolo del prodotto. Gli adapter e i
+profili operativi devono poter essere configurati per aziende diverse senza modificare
+il motore di verifica. Il trasporto Gmail accetta quindi account, nome aziendale e
+ruolo del tenant da configurazione, mantenendo obbligatoria la corrispondenza tra
+account autenticato e mittente. Le regole A&F/SB descritte sotto appartengono al
+profilo pilota e non definiscono universalmente WorkflowOS.
+
 Questo repository contiene il primo percorso eseguibile, deliberatamente piccolo:
 
 ```text
@@ -108,6 +115,7 @@ I test coprono:
 - runtime Monday in modalità test senza invii esterni;
 - interruttore esplicito per l'email reale e blocco delle duplicazioni.
 - adapter SMTP Hostpoint con STARTTLS, verifica del mittente A&F e controllo hash degli allegati.
+- adapter Gmail configurabile per tenant, con mittente autenticato coincidente, firma aziendale e ruolo verificato.
 
 ## Confini delle responsabilità
 

@@ -84,6 +84,55 @@ class WorkflowOSGmailEmailTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkflowError, "LIVE_ENABLED=true"):
             GmailSmtpConfig.from_environment({"GMAIL_SMTP_PASSWORD": "secret"})
 
+    def test_supports_a_different_tenant_without_changing_product_code(self):
+        config = GmailSmtpConfig(
+            password="tenant-app-password",
+            username="automation@example.com",
+            from_address="AUTOMATION@example.com",
+            from_name="Example Installations AG",
+            organization_role="example_installations",
+        )
+        request = dict(self.request)
+        request["from_organization_role"] = "example_installations"
+        sender = GmailSmtpSender(
+            config,
+            lambda locator: EmailAttachment(
+                filename=f"{locator}.pdf", content=self.contents[locator]
+            ),
+            smtp_factory=self.factory,
+        )
+
+        sender(request)
+
+        self.assertEqual(
+            self.connection.send_args,
+            ("AUTOMATION@example.com", ["verified-sb@example.invalid"]),
+        )
+        self.assertIn(
+            "Example Installations AG",
+            self.connection.message.get_body(preferencelist=("plain",)).get_content(),
+        )
+
+    def test_tenant_sender_must_match_authenticated_account(self):
+        with self.assertRaisesRegex(WorkflowError, "must match"):
+            GmailSmtpConfig(
+                password="secret",
+                username="tenant@example.com",
+                from_address="other@example.com",
+            )
+
+    def test_request_role_must_match_tenant_config(self):
+        config = GmailSmtpConfig(
+            password="secret",
+            username="tenant@example.com",
+            from_address="tenant@example.com",
+            from_name="Tenant AG",
+            organization_role="tenant",
+        )
+        with self.assertRaisesRegex(WorkflowError, "tenant config"):
+            GmailSmtpSender(config, lambda locator: None)(self.request)
+        self.assertIsNone(self.connection)
+
 
 if __name__ == "__main__":
     unittest.main()
