@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "workflowos"
 version = "0.1.0"
-description = "A small, verifiable governance engine for evidence-driven workflows"
+description = "MERAVIQA's verifiable governance engine for evidence-driven workflows"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -14,6 +14,7 @@ dependencies = []
 
 [project.scripts]
 workflowos = "workflowos.cli:main"
+meraviqa = "workflowos.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["workflowos*"]

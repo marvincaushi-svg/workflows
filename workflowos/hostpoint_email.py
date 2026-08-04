@@ -1,4 +1,4 @@
-"""Hostpoint SMTP adapter for guarded WorkflowOS email delivery."""
+"""Hostpoint SMTP adapter for guarded MERAVIQA email delivery."""
 
 from __future__ import annotations
 
@@ -17,7 +17,11 @@ from .core import SHA256_RE, WorkflowError, _require_string
 
 HOSTPOINT_SMTP_HOST = "asmtp.mail.hostpoint.ch"
 HOSTPOINT_SMTP_STARTTLS_PORT = 587
-AF_SMTP_ADDRESS = "marvin.caushi@elektro-af.ch"
+DEFAULT_HOSTPOINT_ADDRESS = "marvin.caushi@elektro-af.ch"
+# Backwards-compatible pilot alias. Product logic uses the tenant configuration.
+AF_SMTP_ADDRESS = DEFAULT_HOSTPOINT_ADDRESS
+MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024
+PRODUCT_NAME = "MERAVIQA"
 SUPPORTED_TEMPLATES = {"accepted_grid_documents", "signed_safety_report"}
 
 
@@ -27,8 +31,9 @@ class HostpointSmtpConfig:
 
     username: str
     password: str = field(repr=False)
-    from_address: str = AF_SMTP_ADDRESS
+    from_address: str = DEFAULT_HOSTPOINT_ADDRESS
     from_name: str = "A&F Elektro GmbH"
+    organization_role: str = "af_elektro"
     host: str = HOSTPOINT_SMTP_HOST
     port: int = HOSTPOINT_SMTP_STARTTLS_PORT
     timeout_seconds: float = 30.0
@@ -38,18 +43,20 @@ class HostpointSmtpConfig:
             raise WorkflowError("Hostpoint SMTP host must be asmtp.mail.hostpoint.ch")
         if self.port != HOSTPOINT_SMTP_STARTTLS_PORT:
             raise WorkflowError("Hostpoint SMTP must use STARTTLS on port 587")
-        if self.username.casefold() != AF_SMTP_ADDRESS:
+        if "@" not in self.username or any(char in self.username for char in "\r\n"):
+            raise WorkflowError("Hostpoint SMTP username must be a valid email address")
+        if self.from_address.casefold() != self.username.casefold():
             raise WorkflowError(
-                "Hostpoint SMTP username must be Marvin.Caushi@elektro-af.ch"
-            )
-        if self.from_address.casefold() != AF_SMTP_ADDRESS:
-            raise WorkflowError(
-                "Hostpoint SMTP sender must be Marvin.Caushi@elektro-af.ch"
+                "Hostpoint SMTP sender must match the authenticated account"
             )
         if not self.password:
             raise WorkflowError("Hostpoint SMTP password is required")
-        if not self.from_name.strip():
-            raise WorkflowError("Hostpoint SMTP sender name is required")
+        if not self.from_name.strip() or not self.organization_role.strip():
+            raise WorkflowError(
+                "Hostpoint SMTP sender name and organization role are required"
+            )
+        if any(char in self.from_name for char in "\r\n"):
+            raise WorkflowError("Hostpoint SMTP sender name is invalid")
         if self.timeout_seconds <= 0:
             raise WorkflowError("Hostpoint SMTP timeout must be positive")
 
@@ -87,8 +94,14 @@ class HostpointSmtpConfig:
         return cls(
             username=values.get("WORKFLOWOS_SMTP_USERNAME", ""),
             password=values.get("WORKFLOWOS_SMTP_PASSWORD", ""),
-            from_address=values.get("WORKFLOWOS_SMTP_FROM", AF_SMTP_ADDRESS),
+            from_address=values.get(
+                "WORKFLOWOS_SMTP_FROM",
+                values.get("WORKFLOWOS_SMTP_USERNAME", DEFAULT_HOSTPOINT_ADDRESS),
+            ),
             from_name=values.get("WORKFLOWOS_SMTP_FROM_NAME", "A&F Elektro GmbH"),
+            organization_role=values.get(
+                "WORKFLOWOS_ORGANIZATION_ROLE", "af_elektro"
+            ),
             host=values.get("WORKFLOWOS_SMTP_HOST", HOSTPOINT_SMTP_HOST),
             port=port,
             timeout_seconds=timeout,
@@ -133,17 +146,17 @@ def send_hostpoint_self_test(
     *,
     smtp_factory: SmtpFactory = smtplib.SMTP,
 ) -> dict[str, str]:
-    """Send one fixed, attachment-free test from and to the A&F mailbox."""
+    """Send one attachment-free test to the authenticated tenant mailbox."""
 
     message = EmailMessage()
     message["From"] = formataddr((config.from_name, config.from_address))
-    message["To"] = AF_SMTP_ADDRESS
-    message["Subject"] = "Test WorkflowOS – collegamento email A&F"
-    message["Message-ID"] = make_msgid(domain="elektro-af.ch")
+    message["To"] = config.from_address
+    message["Subject"] = f"Test {PRODUCT_NAME} – collegamento email {config.from_name}"
+    message["Message-ID"] = make_msgid(domain=_sender_domain(config.from_address))
     message["X-WorkflowOS-Test"] = "hostpoint-self-test"
     message.set_content(
-        "Questa è una email di prova inviata da WorkflowOS tramite Hostpoint.\n\n"
-        "Mittente e destinatario: Marvin.Caushi@elektro-af.ch\n"
+        f"Questa è una email di prova inviata da {PRODUCT_NAME} tramite Hostpoint.\n\n"
+        f"Mittente e destinatario: {config.from_address}\n"
         "Nessun documento cliente è stato allegato.\n"
     )
     message_ref = hashlib.sha256(message.as_bytes()).hexdigest()
@@ -160,7 +173,7 @@ def send_hostpoint_self_test(
             refused = smtp.send_message(
                 message,
                 from_addr=config.from_address,
-                to_addrs=[AF_SMTP_ADDRESS],
+                to_addrs=[config.from_address],
             )
     except (OSError, smtplib.SMTPException) as exc:
         raise WorkflowError(
@@ -168,12 +181,12 @@ def send_hostpoint_self_test(
         ) from exc
 
     if refused:
-        raise WorkflowError("Hostpoint SMTP refused the A&F self-test recipient")
+        raise WorkflowError("Hostpoint SMTP refused the tenant self-test recipient")
     return {
         "provider": "hostpoint_smtp",
         "delivery_status": "sent",
         "sender_email": config.from_address,
-        "recipient_email": AF_SMTP_ADDRESS,
+        "recipient_email": config.from_address,
         "message_ref_sha256": message_ref,
     }
 
@@ -263,8 +276,8 @@ class HostpointSmtpSender:
     ) -> tuple[EmailMessage, str]:
         if request.get("source") != "workflowos":
             raise WorkflowError("SMTP request source must be workflowos")
-        if request.get("from_organization_role") != "af_elektro":
-            raise WorkflowError("SMTP request sender role must be af_elektro")
+        if request.get("from_organization_role") != self._config.organization_role:
+            raise WorkflowError("SMTP request sender role does not match tenant config")
 
         recipient_email = _require_string(
             request.get("recipient_email"), "email_request.recipient_email"
@@ -288,17 +301,23 @@ class HostpointSmtpSender:
         if not locators or len(locators) != len(references):
             raise WorkflowError("SMTP attachment locators and refs must align")
 
-        subject, body = _render_template(template, case_id)
+        subject, body = _render_template(template, case_id, self._config.from_name)
         message = EmailMessage()
         message["From"] = formataddr(
             (self._config.from_name, self._config.from_address)
         )
         message["To"] = recipient_email
         message["Subject"] = subject
-        message["Message-ID"] = make_msgid(domain="elektro-af.ch")
+        message["Message-ID"] = make_msgid(
+            domain=_sender_domain(self._config.from_address)
+        )
         message["X-WorkflowOS-Idempotency-Key"] = idempotency_key
         message.set_content(body)
 
+        seen_refs: set[str] = set()
+        seen_names: set[str] = set()
+        total_bytes = 0
+        attachments: list[EmailAttachment] = []
         for locator_value, reference_value in zip(locators, references, strict=True):
             locator = _require_string(locator_value, "email_request.attachment_locator")
             expected_ref = _require_string(
@@ -306,12 +325,25 @@ class HostpointSmtpSender:
             )
             if not SHA256_RE.fullmatch(expected_ref):
                 raise WorkflowError("SMTP attachment ref must be SHA-256")
+            if expected_ref in seen_refs:
+                raise WorkflowError("Duplicate Monday attachment is not allowed")
             attachment = self._attachment_loader(locator)
             if not isinstance(attachment, EmailAttachment):
                 raise WorkflowError("attachment_loader must return EmailAttachment")
             observed_ref = hashlib.sha256(attachment.content).hexdigest()
             if observed_ref != expected_ref:
                 raise WorkflowError("SMTP attachment content hash does not match Monday")
+            normalized_name = attachment.filename.casefold()
+            if normalized_name in seen_names:
+                raise WorkflowError("Duplicate attachment filename is not allowed")
+            seen_refs.add(expected_ref)
+            seen_names.add(normalized_name)
+            total_bytes += len(attachment.content)
+            if total_bytes > MAX_TOTAL_ATTACHMENT_BYTES:
+                raise WorkflowError("Monday attachments exceed the 20 MB email limit")
+            attachments.append(attachment)
+
+        for attachment in attachments:
             main_type, sub_type = attachment.content_type.split("/", 1)
             message.add_attachment(
                 attachment.content,
@@ -322,17 +354,23 @@ class HostpointSmtpSender:
         return message, recipient_email
 
 
-def _render_template(template: str, case_id: str) -> tuple[str, str]:
+def _render_template(template: str, case_id: str, sender_name: str) -> tuple[str, str]:
     if template == "accepted_grid_documents":
         return (
             f"Documentazione pratica accettata – {case_id}",
             "Buongiorno,\n\n"
             "in allegato trasmettiamo TAG, IA e schema relativi alla commessa "
-            f"{case_id}.\n\nCordiali saluti\nA&F Elektro GmbH\n",
+            f"{case_id}.\n\nCordiali saluti\n{sender_name}\n",
         )
     return (
         f"RaSi/SiNa impianto ultimato – {case_id}",
         "Buongiorno,\n\n"
         "in allegato trasmettiamo il RaSi/SiNa firmato relativo alla commessa "
-        f"{case_id}.\n\nCordiali saluti\nA&F Elektro GmbH\n",
+        f"{case_id}.\n\nCordiali saluti\n{sender_name}\n",
     )
+
+
+def _sender_domain(address: str) -> str:
+    """Return the validated sender domain for RFC-compliant message IDs."""
+
+    return address.rsplit("@", 1)[1].casefold()
