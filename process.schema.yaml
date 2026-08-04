@@ -13,7 +13,7 @@
       "available_project_data_provider": "sb_energetica",
       "technical_document_owner": "af_elektro",
       "grid_operator_manager": "af_elektro",
-      "af_elektro_deliverables": [
+      "technical_deliverables": [
         "tag_grid_connection_application",
         "installation_notice_ia",
         "single_line_diagram",

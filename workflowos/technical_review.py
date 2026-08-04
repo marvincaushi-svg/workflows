@@ -182,8 +182,27 @@ def create_remediation_plan(
     decision: dict[str, Any],
     case_id: str,
     created_at: str,
+    role_profile: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Split missing controls into ordered A&F-owned operational workstreams."""
+    """Split missing controls into ordered tenant-owned operational workstreams."""
+
+    roles = role_profile or {}
+    technical_owner_role = _require_string(
+        roles.get("technical_document_owner", AF_TECHNICAL_OWNER_ROLE),
+        "role_profile.technical_document_owner",
+    )
+    assignment_owner_role = _require_string(
+        roles.get("assignment_owner", SB_ASSIGNMENT_OWNER_ROLE),
+        "role_profile.assignment_owner",
+    )
+    project_data_provider_role = _require_string(
+        roles.get("available_project_data_provider", assignment_owner_role),
+        "role_profile.available_project_data_provider",
+    )
+    grid_operator_manager_role = _require_string(
+        roles.get("grid_operator_manager", technical_owner_role),
+        "role_profile.grid_operator_manager",
+    )
 
     if not CASE_ID_RE.fullmatch(case_id):
         raise WorkflowError("case_id must be a non-sensitive stable identifier")
@@ -224,13 +243,13 @@ def create_remediation_plan(
             "work_id": f"{case_id}.{stream_id}.1",
             "type": stream["type"],
             "status": "blocked" if dependencies else "open",
-            "assigned_to_role": AF_TECHNICAL_OWNER_ROLE,
+            "assigned_to_role": technical_owner_role,
             "depends_on": dependencies,
             "deliverables": [
                 {
                     "control_id": control_id,
                     "description": CONTROL_DELIVERABLES[control_id],
-                    "owner_role": AF_TECHNICAL_OWNER_ROLE,
+                    "owner_role": technical_owner_role,
                     "acceptance": "content_verified",
                     "status": "requested",
                 }
@@ -243,7 +262,7 @@ def create_remediation_plan(
                 "external_counterparty_role"
             ]
             work_item["external_counterparty_manager_role"] = (
-                AF_TECHNICAL_OWNER_ROLE
+                grid_operator_manager_role
             )
         work_items.append(work_item)
 
@@ -257,17 +276,17 @@ def create_remediation_plan(
                 "work_id": f"{case_id}.{SB_DOCUMENT_HANDOFF['id']}.1",
                 "type": SB_DOCUMENT_HANDOFF["type"],
                 "status": "blocked",
-                "assigned_to_role": AF_TECHNICAL_OWNER_ROLE,
+                "assigned_to_role": technical_owner_role,
                 "depends_on": handoff_dependencies,
                 "trigger": SB_DOCUMENT_HANDOFF["trigger"],
-                "delivery_recipient_role": SB_ASSIGNMENT_OWNER_ROLE,
+                "delivery_recipient_role": assignment_owner_role,
                 "document_repository": "monday",
                 "deliverables": [
                     {
                         "document_type": document_type,
                         "description": CONTROL_DELIVERABLES[document_type],
-                        "owner_role": AF_TECHNICAL_OWNER_ROLE,
-                        "recipient_role": SB_ASSIGNMENT_OWNER_ROLE,
+                        "owner_role": technical_owner_role,
+                        "recipient_role": assignment_owner_role,
                         "acceptance": "content_verified_and_uploaded_to_monday",
                         "status": "waiting_for_monday_upload",
                     }
@@ -286,7 +305,7 @@ def create_remediation_plan(
                     "mismatched_fields": [],
                 },
                 "email_delivery": {
-                    "recipient_role": SB_ASSIGNMENT_OWNER_ROLE,
+                    "recipient_role": assignment_owner_role,
                     "channel": "email",
                     "trigger": (
                         "all_required_documents_uploaded_and_grid_operator_"
@@ -313,17 +332,17 @@ def create_remediation_plan(
                 "work_id": f"{case_id}.{SB_COMPLETION_HANDOFF['id']}.1",
                 "type": SB_COMPLETION_HANDOFF["type"],
                 "status": "blocked",
-                "assigned_to_role": AF_TECHNICAL_OWNER_ROLE,
+                "assigned_to_role": technical_owner_role,
                 "depends_on": completion_dependencies,
                 "trigger": SB_COMPLETION_HANDOFF["trigger"],
-                "delivery_recipient_role": SB_ASSIGNMENT_OWNER_ROLE,
+                "delivery_recipient_role": assignment_owner_role,
                 "document_repository": "monday",
                 "deliverables": [
                     {
                         "document_type": "safety_report_rasi_sina",
                         "description": CONTROL_DELIVERABLES["safety_report_rasi_sina"],
-                        "owner_role": AF_TECHNICAL_OWNER_ROLE,
-                        "recipient_role": SB_ASSIGNMENT_OWNER_ROLE,
+                        "owner_role": technical_owner_role,
+                        "recipient_role": assignment_owner_role,
                         "acceptance": (
                             "content_verified_professionally_signed_and_uploaded_to_monday"
                         ),
@@ -344,7 +363,7 @@ def create_remediation_plan(
                     "mismatched_fields": [],
                 },
                 "email_delivery": {
-                    "recipient_role": SB_ASSIGNMENT_OWNER_ROLE,
+                    "recipient_role": assignment_owner_role,
                     "channel": "email",
                     "trigger": (
                         "installation_completed_and_signed_safety_report_uploaded_"
@@ -364,11 +383,11 @@ def create_remediation_plan(
         "case_id": case_id,
         "type": "af_technical_remediation_plan",
         "status": "open",
-        "assigned_to_role": AF_TECHNICAL_OWNER_ROLE,
-        "assignment_source_role": SB_ASSIGNMENT_OWNER_ROLE,
-        "available_project_data_provider_role": SB_ASSIGNMENT_OWNER_ROLE,
-        "technical_document_owner_role": AF_TECHNICAL_OWNER_ROLE,
-        "grid_operator_manager_role": AF_TECHNICAL_OWNER_ROLE,
+        "assigned_to_role": technical_owner_role,
+        "assignment_source_role": assignment_owner_role,
+        "available_project_data_provider_role": project_data_provider_role,
+        "technical_document_owner_role": technical_owner_role,
+        "grid_operator_manager_role": grid_operator_manager_role,
         "created_at": timestamp,
         "source_decision": "changes_required",
         "work_items": work_items,
@@ -429,8 +448,11 @@ def configure_sb_document_handoff(
     )
     if not EMAIL_RE.fullmatch(recipient_email):
         raise WorkflowError("SB email recipient must contain a valid email address")
-    if recipient.get("organization_role") != SB_ASSIGNMENT_OWNER_ROLE:
-        raise WorkflowError("Email recipient organization_role must be sb_energetica")
+    expected_recipient_role = _require_string(
+        handoff.get("delivery_recipient_role"), "handoff.delivery_recipient_role"
+    )
+    if recipient.get("organization_role") != expected_recipient_role:
+        raise WorkflowError("Email recipient organization_role does not match handoff")
     if recipient.get("resolution_status") != "verified":
         raise WorkflowError("SB email recipient must be verified before automation")
 
@@ -442,7 +464,7 @@ def configure_sb_document_handoff(
         "sb_email_recipient": {
             "name": recipient_name,
             "email": recipient_email,
-            "organization_role": SB_ASSIGNMENT_OWNER_ROLE,
+            "organization_role": expected_recipient_role,
             "resolution_status": "verified",
         },
     }
