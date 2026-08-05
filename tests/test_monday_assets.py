@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import unittest
 import urllib.request
+from unittest.mock import patch
 
 from workflowos.core import WorkflowError
 from workflowos.monday_assets import (
     DEFAULT_ASSET_HOSTS,
+    MONDAY_API_URL,
     DownloadedAsset,
     MondayReadOnlyCollector,
     MondayReadOnlyConfig,
     _ApprovedAssetRedirectHandler,
+    _RejectApiRedirectHandler,
 )
 
 
@@ -200,6 +204,82 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
 
         self.assertIsNotNone(redirected)
         self.assertEqual(redirected.full_url, approved_url)
+
+    def test_authenticated_api_redirect_is_always_rejected(self):
+        handler = _RejectApiRedirectHandler()
+        request = urllib.request.Request(
+            MONDAY_API_URL,
+            headers={"Authorization": "test-token"},
+            method="POST",
+        )
+
+        with self.assertRaisesRegex(WorkflowError, "redirects are not allowed"):
+            handler.redirect_request(
+                request,
+                None,
+                302,
+                "Found",
+                {},
+                "https://example.com/v2",
+            )
+
+    def test_api_transport_installs_no_redirect_handler(self):
+        class FakeResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                self.close()
+
+            def geturl(self):
+                return MONDAY_API_URL
+
+        class FakeOpener:
+            def __init__(self):
+                self.requests = []
+
+            def open(self, request, timeout):
+                self.requests.append((request, timeout))
+                return FakeResponse(b'{"data":{"items":[]}}')
+
+        opener = FakeOpener()
+        with patch("urllib.request.build_opener", return_value=opener) as build:
+            result = self.collector()._post_graphql(
+                "query MeraviqaReadOnlyTest { items { id } }",
+                {},
+                "test-token",
+            )
+
+        self.assertEqual(result, {"items": []})
+        self.assertIsInstance(build.call_args.args[0], _RejectApiRedirectHandler)
+        request, timeout = opener.requests[0]
+        self.assertEqual(request.full_url, MONDAY_API_URL)
+        self.assertEqual(request.get_header("Authorization"), "test-token")
+        self.assertEqual(timeout, 30)
+
+    def test_changed_api_response_url_is_rejected_defensively(self):
+        class MovedResponse(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                self.close()
+
+            def geturl(self):
+                return "https://example.com/v2"
+
+        class MovedOpener:
+            def open(self, request, timeout):
+                del request, timeout
+                return MovedResponse(b'{"data":{"items":[]}}')
+
+        with patch("urllib.request.build_opener", return_value=MovedOpener()):
+            with self.assertRaisesRegex(WorkflowError, "response URL changed"):
+                self.collector()._post_graphql(
+                    "query MeraviqaReadOnlyTest { items { id } }",
+                    {},
+                    "test-token",
+                )
 
     def test_non_pdf_content_is_rejected(self):
         self.content = b"not-a-pdf-but-same-size-xxxxx"[: len(PDF)]
