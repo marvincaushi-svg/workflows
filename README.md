@@ -11,6 +11,13 @@ ruolo del tenant da configurazione, mantenendo obbligatoria la corrispondenza tr
 account autenticato e mittente. Le regole A&F/SB descritte sotto appartengono al
 profilo pilota e non definiscono universalmente WorkflowOS.
 
+I PDF ricevuti dai partner possono essere archiviati in entrambe le destinazioni:
+MERAVIQA crea, per ciascun tenant, una cartella con il nome sanificato della
+commessa e conserva il file con scrittura atomica; lo stesso PDF viene pubblicato
+nella colonna documentale dell'item Monday associato. Il checksum SHA-256 blocca
+duplicati e sostituzioni silenziose. Se Monday non conferma il caricamento, il PDF
+resta disponibile in MERAVIQA con stato `pending` e non viene dichiarato caricato.
+
 Questo repository contiene il primo percorso eseguibile, deliberatamente piccolo:
 
 ```text
