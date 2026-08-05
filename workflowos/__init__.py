@@ -12,7 +12,13 @@ from .control_plane import (
     resolve_communication_policy,
     validate_automation_catalog,
 )
-from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
+from .core import (
+    PublicationRefused,
+    WorkflowError,
+    build_case_from_email,
+    evaluate_case,
+    load_document,
+)
 from .document_archive import (
     MeraviqaDocumentArchive,
     MondayArchiveReconciliation,
@@ -67,6 +73,7 @@ __all__ = [
     "MondayReadOnlyCollector",
     "MondayReadOnlyConfig",
     "MondayUploadConfig",
+    "PublicationRefused",
     "MeraviqaDocumentArchive",
     "MondayArchiveReconciliation",
     "DurableMondayEmailPipeline",

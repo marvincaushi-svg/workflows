@@ -80,6 +80,8 @@ python -m workflowos.cli reconcile-monday-upload \
   --evidence-ref-sha256 HASH_SHA256_PROVA
 ```
 
+MERAVIQA distingue due esiti che prima venivano confusi. Un adapter può dichiarare un rifiuto soltanto finché è certo che nemmeno un byte del PDF abbia lasciato il processo: colonna non configurata, item appartenente a un'altra bacheca, contenuto non valido, nome file non sicuro. In quel caso la voce conserva lo stato precedente e resta pubblicabile, `upload_attempts` non aumenta e viene registrato un `refused_attempts` con il codice del rifiuto: nessuna prova umana è necessaria per sbloccare un documento che non è mai partito. Un'autorizzazione al ritentativo già concessa non viene consumata da un rifiuto. Dal momento in cui il payload viene consegnato al transport l'esito è invece incerto, l'errore è ordinario e la voce passa a `upload_in_doubt`, che continua a richiedere riconciliazione con prova. Il ramo del rifiuto è per costruzione irraggiungibile dopo l'inizio della trasmissione.
+
 Ogni voce indica l'azione richiesta: `publish_monday_upload`, `reconcile_monday_upload`, `retry_monday_upload` oppure `none`. La riconciliazione ricostruisce il legame del documento dal manifest e dal PDF archiviato, quindi non può essere dirottata verso un altro item o un'altra colonna Monday; viene eseguita senza adapter di pubblicazione e non apre alcuna connessione. `confirmed-uploaded` chiude la voce, `confirmed-not-uploaded` autorizza un solo ritentativo esplicito, che resta un'azione distinta con l'adapter Monday configurato.
 
 L'adapter `workflowos.monday_uploads` è l'unico componente autorizzato a scrivere un file su Monday ed è disattivato finché `WORKFLOWOS_MONDAY_UPLOAD_ENABLED=true` non viene impostato esplicitamente. Riusa bacheca e colonne del profilo tenant: rifiuta una colonna non configurata prima di qualsiasi richiesta e, prima di trasmettere un solo byte, verifica con una query in sola lettura che l'item appartenga alla bacheca attesa, così un PDF non può finire nella commessa di un altro tenant. Item e colonna raggiungono la mutation già vincolati a cifre e a un identificatore alfanumerico configurato, quindi non possono introdurre sintassi GraphQL. L'endpoint file resta fissato a `https://api.monday.com/v2/file` e ogni redirect della richiesta autenticata viene rifiutato. La conferma restituita dichiara ciò che Monday ha effettivamente accettato — l'id dell'asset creato e, quando riportata, la dimensione memorizzata confrontata con quella trasmessa; l'hash presente nella conferma è il digest dei byte inviati, perché Monday non restituisce un checksum lato server.
@@ -177,6 +179,7 @@ I test coprono:
 - adapter Gmail configurabile per tenant, con mittente autenticato coincidente, firma aziendale e ruolo verificato.
 - ispezione dell'archivio in sola lettura e riconciliazione dei caricamenti Monday incerti, con legame documentale ricostruito dal manifest e nessun accesso a Monday.
 - caricamento Monday protetto da interruttore esplicito, con verifica della bacheca prima dell'invio, rifiuto dei redirect, blocco delle colonne non configurate e controllo della dimensione memorizzata.
+- distinzione fra mancata trasmissione certa ed esito ignoto: la prima conserva lo stato e non consuma un ritentativo autorizzato, la seconda continua a richiedere riconciliazione con prova.
 
 ## Confini delle responsabilità
 

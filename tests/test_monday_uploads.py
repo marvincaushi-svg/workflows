@@ -5,7 +5,7 @@ import json
 import tempfile
 import unittest
 
-from workflowos.core import WorkflowError
+from workflowos.core import PublicationRefused, WorkflowError
 from workflowos.document_archive import MeraviqaDocumentArchive, SbPdfDocument
 from workflowos.monday_uploads import (
     MONDAY_FILE_API_URL,
@@ -65,7 +65,9 @@ class MondayUploadConfigTests(unittest.TestCase):
         self.assertNotIn("token-value", repr(config))
 
 
-class MondayGuardedUploaderTests(unittest.TestCase):
+class UploaderFixtures:
+    """Shared uploader configuration and injected transports."""
+
     def config(self, **changes):
         values = {
             "api_token": "token-value",
@@ -100,6 +102,7 @@ class MondayGuardedUploaderTests(unittest.TestCase):
             calls,
         )
 
+class MondayGuardedUploaderTests(UploaderFixtures, unittest.TestCase):
     def test_upload_confirms_item_column_and_transmitted_checksum(self):
         uploader, calls = self.uploader()
         confirmation = uploader.publish_pdf("2001", "file_tag", "TAG.pdf", PDF)
@@ -193,6 +196,85 @@ class MondayGuardedUploaderTests(unittest.TestCase):
 
         self.assertEqual(result["monday_status"], "uploaded")
         self.assertEqual(calls["uploads"], [("2001", "file_tag", "TAG.pdf", PDF)])
+
+
+class MondayUploadRefusalTests(UploaderFixtures, unittest.TestCase):
+    def assert_refused(self, uploader, *arguments):
+        with self.assertRaises(PublicationRefused):
+            uploader.publish_pdf(*arguments)
+
+    def test_pre_transmission_failures_are_certain_non_transmissions(self):
+        uploader, calls = self.uploader()
+
+        self.assert_refused(uploader, "2001", "file_other", "TAG.pdf", PDF)
+        self.assert_refused(uploader, "2001", "file_tag", "TAG.exe", PDF)
+        self.assert_refused(uploader, "2001", "file_tag", "TAG.pdf", b"not-a-pdf")
+        self.assert_refused(uploader, "not-numeric", "file_tag", "TAG.pdf", PDF)
+        self.assertEqual(calls["uploads"], [])
+
+    def test_cross_board_item_is_a_certain_non_transmission(self):
+        uploader, calls = self.uploader(board_id="9999")
+
+        self.assert_refused(uploader, "2001", "file_tag", "TAG.pdf", PDF)
+        self.assertEqual(calls["uploads"], [])
+
+    def test_binding_query_failure_is_a_certain_non_transmission(self):
+        def failing_reader(query, variables, token):
+            raise OSError("binding query failed")
+
+        uploader = MondayGuardedUploader(
+            self.config(),
+            graphql_reader=failing_reader,
+            file_uploader=lambda *args: self.fail("must not upload"),
+        )
+
+        self.assert_refused(uploader, "2001", "file_tag", "TAG.pdf", PDF)
+
+    def test_transport_failure_is_never_reported_as_a_refusal(self):
+        def failing_upload(*args):
+            raise OSError("connection lost after the request started")
+
+        uploader = MondayGuardedUploader(
+            self.config(),
+            graphql_reader=lambda query, variables, token: {
+                "items": [{"id": "2001", "board": {"id": "1001"}}]
+            },
+            file_uploader=failing_upload,
+        )
+
+        with self.assertRaises(OSError):
+            uploader.publish_pdf("2001", "file_tag", "TAG.pdf", PDF)
+
+    def test_unusable_response_after_upload_is_never_a_refusal(self):
+        uploader, _ = self.uploader(asset={"name": "TAG.pdf"})
+
+        with self.assertRaises(WorkflowError) as caught:
+            uploader.publish_pdf("2001", "file_tag", "TAG.pdf", PDF)
+        self.assertNotIsInstance(caught.exception, PublicationRefused)
+
+    def test_refusal_leaves_the_archive_entry_publishable(self):
+        uploader, calls = self.uploader(board_id="9999")
+        document = SbPdfDocument(
+            tenant_id="tenant-test-001",
+            case_id="case-001",
+            case_name="Example Project",
+            monday_item_id="2001",
+            monday_column_id="file_tag",
+            document_type="tag_grid_connection_application",
+            filename="TAG.pdf",
+            content=PDF,
+            content_sha256=hashlib.sha256(PDF).hexdigest(),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = MeraviqaDocumentArchive(
+                directory, monday_publisher=uploader.publisher()
+            ).archive(document)
+
+        self.assertEqual(result["monday_status"], "pending")
+        self.assertEqual(result["upload_attempts"], 0)
+        self.assertEqual(result["refused_attempts"], 1)
+        self.assertEqual(calls["uploads"], [])
 
 
 class MondayMultipartBodyTests(unittest.TestCase):

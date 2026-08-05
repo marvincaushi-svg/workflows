@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from workflowos.core import WorkflowError
+from workflowos.core import PublicationRefused, WorkflowError
 from workflowos.document_archive import (
     MeraviqaDocumentArchive,
     MondayArchiveReconciliation,
@@ -292,6 +292,106 @@ class MeraviqaDocumentArchiveTests(ArchiveFixtures, unittest.TestCase):
             with self.assertRaisesRegex(WorkflowError, "another item or column"):
                 archive.retry_authorized_monday(self.document(monday_item_id="9999"))
             self.assertEqual(attempts, [("2001", "file_tag")])
+
+
+class RefusedPublicationTests(ArchiveFixtures, unittest.TestCase):
+    def refusing_publisher(self, calls):
+        def publisher(item_id, column_id, filename, content):
+            calls.append(item_id)
+            raise PublicationRefused("column is not configured")
+
+        return publisher
+
+    def test_certain_non_transmission_keeps_the_entry_actionable(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            result = MeraviqaDocumentArchive(
+                directory, monday_publisher=self.refusing_publisher(calls)
+            ).archive(document)
+
+            self.assertEqual(result["monday_status"], "pending")
+            self.assertEqual(result["upload_attempts"], 0)
+            self.assertEqual(result["refused_attempts"], 1)
+            self.assertEqual(len(calls), 1)
+
+    def test_refusal_does_not_demand_reconciliation_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            MeraviqaDocumentArchive(
+                directory, monday_publisher=self.refusing_publisher([])
+            ).archive(document)
+
+            with self.assertRaisesRegex(WorkflowError, "not awaiting reconciliation"):
+                reconcile_archived_monday_upload(
+                    directory, self.evidence(document, "confirmed_not_uploaded")
+                )
+
+    def test_refusal_never_consumes_an_authorized_retry(self):
+        def publisher(item_id, column_id, filename, content):
+            raise PublicationRefused("binding rejected")
+
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            archive = MeraviqaDocumentArchive(
+                directory, monday_publisher=lambda *args: (_ for _ in ()).throw(
+                    OSError("connection lost")
+                )
+            )
+            archive.archive(document)
+            archive.reconcile_monday(
+                document, self.evidence(document, "confirmed_not_uploaded")
+            )
+
+            refusing = MeraviqaDocumentArchive(directory, monday_publisher=publisher)
+            refused = refusing.retry_authorized_monday(document)
+
+            self.assertEqual(refused["monday_status"], "retry_authorized")
+            self.assertEqual(refused["upload_attempts"], 1)
+            self.assertEqual(refused["refused_attempts"], 1)
+
+    def test_uncertain_outcome_still_requires_reconciliation(self):
+        def uncertain(*args):
+            raise OSError("connection lost after upload")
+
+        with tempfile.TemporaryDirectory() as directory:
+            result = MeraviqaDocumentArchive(
+                directory, monday_publisher=uncertain
+            ).archive(self.document())
+
+            self.assertEqual(result["monday_status"], "upload_in_doubt")
+            self.assertEqual(result["upload_attempts"], 1)
+            self.assertEqual(result["refused_attempts"], 0)
+
+    def test_inspection_reports_refusals_and_success_clears_them(self):
+        attempts = []
+
+        def publisher(item_id, column_id, filename, content):
+            attempts.append(filename)
+            if len(attempts) == 1:
+                raise PublicationRefused("column is not configured")
+            return {
+                "item_id": item_id,
+                "column_id": column_id,
+                "content_sha256": hashlib.sha256(content).hexdigest(),
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            archive = MeraviqaDocumentArchive(directory, monday_publisher=publisher)
+            archive.archive(document)
+
+            report = inspect_document_archive(directory)
+            entry = report["entries"][0]
+            self.assertEqual(entry["action_required"], "publish_monday_upload")
+            self.assertEqual(entry["refused_attempts"], 1)
+            self.assertEqual(entry["last_refusal_code"], "PublicationRefused")
+
+            archive.archive(document)
+            resolved = inspect_document_archive(directory)["entries"][0]
+            self.assertEqual(resolved["monday_status"], "uploaded")
+            self.assertNotIn("last_refusal_code", resolved)
+            self.assertEqual(resolved["upload_attempts"], 1)
 
 
 class DocumentArchiveInspectionTests(ArchiveFixtures, unittest.TestCase):
