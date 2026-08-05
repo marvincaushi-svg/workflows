@@ -31,10 +31,18 @@ class WorkflowOSGmailEmailTests(unittest.TestCase):
             self.connection = FakeSmtp(host, port, **kwargs)
             return self.connection
         self.factory = factory
-        self.config = GmailSmtpConfig(password="app-password")
+        self.config = GmailSmtpConfig(
+            password="app-password",
+            tenant_id="tenant-pilot-001",
+            username="automation@example.invalid",
+            from_address="automation@example.invalid",
+            from_name="Pilot Installations AG",
+            organization_role="pilot_installer",
+        )
         self.request = {
             "source": "workflowos",
-            "from_organization_role": "af_elektro",
+            "tenant_id": "tenant-pilot-001",
+            "from_organization_role": "pilot_installer",
             "recipient_email": "verified-sb@example.invalid",
             "case_id": "case-001",
             "template": "accepted_grid_documents",
@@ -54,7 +62,7 @@ class WorkflowOSGmailEmailTests(unittest.TestCase):
     def test_sends_three_verified_monday_attachments_with_starttls(self):
         result = self.sender()(self.request)
         self.assertEqual(self.connection.events, ["ehlo", "starttls", "ehlo", "login", "send_message"])
-        self.assertEqual(self.connection.send_args, ("marvin.caushi@gmail.com", ["verified-sb@example.invalid"]))
+        self.assertEqual(self.connection.send_args, ("automation@example.invalid", ["verified-sb@example.invalid"]))
         self.assertEqual(len(list(self.connection.message.iter_attachments())), 3)
         self.assertEqual(result["provider"], "gmail_smtp")
 
@@ -87,12 +95,14 @@ class WorkflowOSGmailEmailTests(unittest.TestCase):
     def test_supports_a_different_tenant_without_changing_product_code(self):
         config = GmailSmtpConfig(
             password="tenant-app-password",
-            username="automation@example.com",
-            from_address="AUTOMATION@example.com",
+            tenant_id="tenant-example-001",
+            username="automation@example.invalid",
+            from_address="AUTOMATION@example.invalid",
             from_name="Example Installations AG",
             organization_role="example_installations",
         )
         request = dict(self.request)
+        request["tenant_id"] = "tenant-example-001"
         request["from_organization_role"] = "example_installations"
         sender = GmailSmtpSender(
             config,
@@ -106,7 +116,7 @@ class WorkflowOSGmailEmailTests(unittest.TestCase):
 
         self.assertEqual(
             self.connection.send_args,
-            ("AUTOMATION@example.com", ["verified-sb@example.invalid"]),
+            ("AUTOMATION@example.invalid", ["verified-sb@example.invalid"]),
         )
         self.assertIn(
             "Example Installations AG",
@@ -117,20 +127,35 @@ class WorkflowOSGmailEmailTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkflowError, "must match"):
             GmailSmtpConfig(
                 password="secret",
-                username="tenant@example.com",
-                from_address="other@example.com",
+                tenant_id="tenant-example-001",
+                username="tenant@example.invalid",
+                from_address="other@example.invalid",
             )
 
     def test_request_role_must_match_tenant_config(self):
         config = GmailSmtpConfig(
             password="secret",
-            username="tenant@example.com",
-            from_address="tenant@example.com",
+            tenant_id="tenant-example-001",
+            username="tenant@example.invalid",
+            from_address="tenant@example.invalid",
             from_name="Tenant AG",
             organization_role="tenant",
         )
+        request = dict(self.request)
+        request["tenant_id"] = "tenant-example-001"
         with self.assertRaisesRegex(WorkflowError, "tenant config"):
-            GmailSmtpSender(config, lambda locator: None)(self.request)
+            GmailSmtpSender(config, lambda locator: None)(request)
+        self.assertIsNone(self.connection)
+
+    def test_request_tenant_must_match_gmail_config_before_loading_files(self):
+        request = dict(self.request)
+        request["tenant_id"] = "tenant-other-001"
+
+        with self.assertRaisesRegex(WorkflowError, "tenant does not match"):
+            self.sender(loader=lambda locator: self.fail("loader must not run"))(
+                request
+            )
+
         self.assertIsNone(self.connection)
 
 

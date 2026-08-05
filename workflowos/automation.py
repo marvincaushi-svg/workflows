@@ -40,6 +40,9 @@ def initialize_automation_state(
     """Bind both SB handoffs to one authoritative Monday item."""
 
     case_id = _require_string(monday_case.get("case_id"), "monday_case.case_id")
+    tenant_id = _require_string(
+        monday_case.get("tenant_id"), "monday_case.tenant_id"
+    )
     board_id = _require_string(monday_case.get("board_id"), "monday_case.board_id")
     item_id = _require_string(monday_case.get("item_id"), "monday_case.item_id")
     if plan.get("case_id") != case_id:
@@ -64,6 +67,7 @@ def initialize_automation_state(
 
     return {
         "schema_version": "1.0",
+        "tenant_id": tenant_id,
         "source": "monday",
         "case_id": case_id,
         "board_id": board_id,
@@ -89,6 +93,9 @@ def handle_monday_file_event(
     if updated.get("source") != "monday":
         raise WorkflowError("Automation state source must be monday")
 
+    state_tenant_id = _require_string(updated.get("tenant_id"), "state.tenant_id")
+    if state_tenant_id != runtime["expected_tenant_id"]:
+        raise WorkflowError("Automation state tenant does not match configured tenant")
     state_board_id = _require_string(updated.get("board_id"), "state.board_id")
     if state_board_id != runtime["expected_board_id"]:
         raise WorkflowError("Automation state board does not match configured board")
@@ -97,7 +104,7 @@ def handle_monday_file_event(
     if event.get("event_type") != "file_column_changed":
         raise WorkflowError("Automation event_type must be file_column_changed")
 
-    for field in ("board_id", "item_id", "case_id"):
+    for field in ("tenant_id", "board_id", "item_id", "case_id"):
         observed = _require_string(event.get(field), f"event.{field}")
         expected = _require_string(updated.get(field), f"state.{field}")
         if observed != expected:
@@ -202,7 +209,9 @@ def handle_monday_file_event(
         updated["last_result"] = result
         return {"state": updated, "result": result}
 
-    email_request = _build_email_request(current_handoff, asset_locators)
+    email_request = _build_email_request(
+        current_handoff, asset_locators, state_tenant_id
+    )
     if runtime["mode"] == "test":
         result = {
             "status": "ready_test_no_email_sent",
@@ -237,6 +246,9 @@ def handle_monday_file_event(
 
 
 def _validate_config(config: dict[str, Any]) -> dict[str, Any]:
+    expected_tenant_id = _require_string(
+        config.get("expected_tenant_id"), "config.expected_tenant_id"
+    )
     expected_board_id = _require_string(
         config.get("expected_board_id"), "config.expected_board_id"
     )
@@ -266,6 +278,7 @@ def _validate_config(config: dict[str, Any]) -> dict[str, Any]:
         )
 
     return {
+        "expected_tenant_id": expected_tenant_id,
         "expected_board_id": expected_board_id,
         "mode": mode,
         "allow_external_email": allow_external_email,
@@ -274,7 +287,7 @@ def _validate_config(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_email_request(
-    handoff: dict[str, Any], asset_locators: dict[str, Any]
+    handoff: dict[str, Any], asset_locators: dict[str, Any], tenant_id: str
 ) -> dict[str, Any]:
     email_delivery = _require_mapping(
         handoff.get("email_delivery"), "handoff.email_delivery"
@@ -299,6 +312,7 @@ def _build_email_request(
     case_context = _require_mapping(handoff.get("case_context"), "case_context")
     case_id = _require_string(case_context.get("case_id"), "case_context.case_id")
     payload = {
+        "tenant_id": tenant_id,
         "case_id": case_id,
         "work_id": handoff.get("work_id"),
         "recipient_email": recipient_email,
@@ -314,6 +328,7 @@ def _build_email_request(
     )
     return {
         "source": "workflowos",
+        "tenant_id": tenant_id,
         "from_organization_role": _require_string(
             handoff.get("assigned_to_role"), "handoff.assigned_to_role"
         ),

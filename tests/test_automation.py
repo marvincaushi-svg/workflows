@@ -43,6 +43,7 @@ class WorkflowOSAutomationTests(unittest.TestCase):
         }
         self.monday_case = {
             "source": "monday",
+            "tenant_id": "tenant-test-001",
             "board_id": "board-test-001",
             "item_id": "item-test-001",
             "case_id": "pilot-pv-001",
@@ -55,6 +56,7 @@ class WorkflowOSAutomationTests(unittest.TestCase):
             },
         }
         self.config = {
+            "expected_tenant_id": "tenant-test-001",
             "expected_board_id": "board-test-001",
             "mode": "test",
             "allow_external_email": False,
@@ -71,6 +73,7 @@ class WorkflowOSAutomationTests(unittest.TestCase):
         value = {
             "source": "monday",
             "event_type": "file_column_changed",
+            "tenant_id": "tenant-test-001",
             "board_id": "board-test-001",
             "item_id": "item-test-001",
             "case_id": "pilot-pv-001",
@@ -120,6 +123,7 @@ class WorkflowOSAutomationTests(unittest.TestCase):
         return outcome
 
     def test_state_binds_both_handoffs_to_one_monday_item(self):
+        self.assertEqual(self.state["tenant_id"], "tenant-test-001")
         self.assertEqual(self.state["board_id"], "board-test-001")
         self.assertEqual(self.state["item_id"], "item-test-001")
         self.assertEqual(
@@ -147,6 +151,24 @@ class WorkflowOSAutomationTests(unittest.TestCase):
                 "single_line_diagram",
             ],
         )
+        self.assertEqual(
+            outcome["result"]["email_request"]["tenant_id"],
+            "tenant-test-001",
+        )
+
+    def test_cross_tenant_event_is_rejected_without_state_mutation(self):
+        event = self.event("tag-column", 1, tenant_id="tenant-other-001")
+        before = copy.deepcopy(self.state)
+
+        with self.assertRaisesRegex(WorkflowError, "tenant_id does not match"):
+            handle_monday_file_event(
+                self.state,
+                event,
+                self.verification(event),
+                self.config,
+            )
+
+        self.assertEqual(self.state, before)
 
     def test_live_mode_requires_explicit_external_email_switch(self):
         config = copy.deepcopy(self.config)

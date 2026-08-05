@@ -39,6 +39,7 @@ RECONCILIATION_OUTCOMES = {"confirmed_sent", "confirmed_not_sent"}
 class MondayFileChange:
     """Non-secret identifiers and workflow facts for one Monday file change."""
 
+    tenant_id: str
     item_id: str
     case_id: str
     column_id: str
@@ -92,6 +93,13 @@ class DurableMondayEmailPipeline:
 
         with lock_automation_state(state_path):
             state = load_automation_state(state_path)
+            binding = self._collector.tenant_binding()
+            _validate_change_binding(
+                state,
+                change,
+                expected_tenant_id=binding["tenant_id"],
+                expected_board_id=binding["expected_board_id"],
+            )
             unresolved = _find_unresolved_delivery(state)
             if unresolved is not None:
                 return {
@@ -102,14 +110,6 @@ class DurableMondayEmailPipeline:
                         "idempotency_key": unresolved,
                     },
                 }
-
-            _validate_change_binding(
-                state,
-                change,
-                expected_board_id=self._collector.tenant_binding()[
-                    "expected_board_id"
-                ],
-            )
 
             event = self._collector.collect_file_event(
                 item_id=change.item_id,
@@ -177,7 +177,11 @@ class DurableMondayEmailPipeline:
     ) -> dict[str, Any]:
         """Resolve an uncertain delivery without sending or querying Monday."""
 
-        return reconcile_delivery_state(state_path, evidence)
+        return reconcile_delivery_state(
+            state_path,
+            evidence,
+            expected_tenant_id=self._collector.tenant_binding()["tenant_id"],
+        )
 
     def retry_authorized_delivery(
         self,
@@ -188,6 +192,9 @@ class DurableMondayEmailPipeline:
 
         with lock_automation_state(state_path):
             state = load_automation_state(state_path)
+            _validate_state_tenant_binding(
+                state, self._collector.tenant_binding()["tenant_id"]
+            )
             outbox = _require_mapping(
                 state.get("delivery_outbox"), "state.delivery_outbox"
             )
@@ -255,12 +262,17 @@ class DurableMondayEmailPipeline:
 
     def _validate_binding(self) -> None:
         binding = self._collector.tenant_binding()
+        expected_tenant = _require_string(
+            self._config.get("expected_tenant_id"), "config.expected_tenant_id"
+        )
         expected_board = _require_string(
             self._config.get("expected_board_id"), "config.expected_board_id"
         )
         raw_columns = _require_mapping(
             self._config.get("document_columns"), "config.document_columns"
         )
+        if binding["tenant_id"] != expected_tenant:
+            raise WorkflowError("Monday collector and automation tenant do not match")
         if binding["expected_board_id"] != expected_board:
             raise WorkflowError("Monday collector and automation board do not match")
         if binding["document_columns"] != dict(raw_columns):
@@ -310,16 +322,29 @@ def inspect_delivery_outbox(state_path: str | Path) -> dict[str, Any]:
         }
 
 
+def _validate_state_tenant_binding(
+    state: dict[str, Any], expected_tenant_id: str
+) -> str:
+    state_tenant_id = _require_string(state.get("tenant_id"), "state.tenant_id")
+    if state_tenant_id != expected_tenant_id:
+        raise WorkflowError("Automation state tenant does not match Monday collector")
+    return state_tenant_id
+
+
 def _validate_change_binding(
     state: dict[str, Any],
     change: MondayFileChange,
     *,
+    expected_tenant_id: str,
     expected_board_id: str,
 ) -> None:
     """Reject a cross-case event before any Monday API or asset request."""
 
     if state.get("source") != "monday":
         raise WorkflowError("Automation state source must be monday")
+    state_tenant_id = _validate_state_tenant_binding(state, expected_tenant_id)
+    if change.tenant_id != state_tenant_id:
+        raise WorkflowError("Monday change tenant_id does not match persisted state")
     state_board_id = _require_string(state.get("board_id"), "state.board_id")
     if state_board_id != expected_board_id:
         raise WorkflowError("Automation state board does not match Monday collector")
@@ -334,11 +359,15 @@ def _validate_change_binding(
 def reconcile_delivery_state(
     state_path: str | Path,
     evidence: DeliveryReconciliation,
+    *,
+    expected_tenant_id: str | None = None,
 ) -> dict[str, Any]:
     """Resolve uncertain delivery state without email or Monday adapters."""
 
     with lock_automation_state(state_path):
         state = load_automation_state(state_path)
+        if expected_tenant_id is not None:
+            _validate_state_tenant_binding(state, expected_tenant_id)
         outbox = _require_mapping(
             state.get("delivery_outbox"), "state.delivery_outbox"
         )
