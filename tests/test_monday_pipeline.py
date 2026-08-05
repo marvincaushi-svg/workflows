@@ -25,8 +25,9 @@ from workflowos.technical_review import create_remediation_plan, evaluate_techni
 
 ROOT = Path(__file__).resolve().parents[1]
 REVIEW_PATH = ROOT / "examples" / "pilot" / "technical-review.sanitized.json"
-BOARD_ID = "5090983792"
-ITEM_ID = "3050000000"
+BOARD_ID = "1001"
+ITEM_ID = "2001"
+TENANT_ID = "tenant-pilot-001"
 COLUMNS = {
     "file_tag": "tag_grid_connection_application",
     "file_ia": "installation_notice_ia",
@@ -65,18 +66,18 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
     def setUp(self):
         FakeSmtp.sent_messages = []
         self.identity = {
-            "customer_name": "Cliente Esempio SA",
+            "customer_name": "Test Customer",
             "installation_address": {
-                "street": "Via Esempio",
-                "house_number": "10",
-                "postal_code": "2540",
-                "city": "Città Esempio",
+                "street": "Test Street",
+                "house_number": "1",
+                "postal_code": "00000",
+                "city": "Test City",
             },
-            "project_reference": "SB-2026-001",
-            "owner_name": "Proprietario Esempio",
-            "parcel_number": "1001",
+            "project_reference": "TEST-001",
+            "owner_name": "Test Owner",
+            "parcel_number": "TEST-PARCEL",
             "pv_power_kwp": "18.80",
-            "grid_operator": "Gestore Esempio",
+            "grid_operator": "Test Grid Operator",
         }
         review = load_document(REVIEW_PATH)
         plan = create_remediation_plan(
@@ -84,6 +85,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
         )
         monday_case = {
             "source": "monday",
+            "tenant_id": TENANT_ID,
             "board_id": BOARD_ID,
             "item_id": ITEM_ID,
             "case_id": "pilot-pv-001",
@@ -108,11 +110,11 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
         def graphql(query, variables, token):
             self.graphql_calls.append((query, copy.deepcopy(variables), token))
             column = variables["columnIds"][0]
-            asset_id = str(700000000 + list(COLUMNS).index(column))
+            asset_id = str(3001 + list(COLUMNS).index(column))
             content = self.contents[column]
             url = (
-                "https://prod-euc1-files-monday-com.s3.eu-central-1.amazonaws.com/"
-                f"sanitized/{asset_id}/{column}.pdf?signature=redacted"
+                "https://assets.example.invalid/"
+                f"test/{asset_id}/{column}.pdf?signature=redacted"
             )
             return {
                 "items": [{
@@ -144,20 +146,30 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
         self.collector = MondayReadOnlyCollector(
             MondayReadOnlyConfig(
                 api_token="test-token",
+                tenant_id=TENANT_ID,
                 expected_board_id=BOARD_ID,
                 document_columns=COLUMNS,
+                allowed_asset_hosts=("assets.example.invalid",),
             ),
             graphql_transport=graphql,
             download_transport=download,
         )
         self.automation_config = {
+            "expected_tenant_id": TENANT_ID,
             "expected_board_id": BOARD_ID,
             "mode": "live",
             "allow_external_email": True,
             "document_columns": COLUMNS,
         }
         gmail = GmailSmtpSender(
-            GmailSmtpConfig(password="test-password"),
+            GmailSmtpConfig(
+                password="test-password",
+                tenant_id=TENANT_ID,
+                username="automation@example.invalid",
+                from_address="automation@example.invalid",
+                from_name="Pilot Installations AG",
+                organization_role="af_elektro",
+            ),
             self.collector.load_attachment,
             smtp_factory=FakeSmtp,
         )
@@ -201,6 +213,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
             pipeline.process(
                 self.state_path,
                 MondayFileChange(
+                    tenant_id=TENANT_ID,
                     item_id=ITEM_ID,
                     case_id="pilot-pv-001",
                     column_id=column,
@@ -211,6 +224,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
             pipeline.process(
                 self.state_path,
                 MondayFileChange(
+                    tenant_id=TENANT_ID,
                     item_id=ITEM_ID,
                     case_id="pilot-pv-001",
                     column_id="file_schema",
@@ -228,6 +242,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
             outcome = self.pipeline.process(
                 self.state_path,
                 MondayFileChange(
+                    tenant_id=TENANT_ID,
                     item_id=ITEM_ID,
                     case_id="pilot-pv-001",
                     column_id=column,
@@ -239,7 +254,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
         self.assertEqual(outcome["result"]["status"], "completed")
         self.assertEqual(len(FakeSmtp.sent_messages), 1)
         message, sender, recipients = FakeSmtp.sent_messages[0]
-        self.assertEqual(sender, "marvin.caushi@gmail.com")
+        self.assertEqual(sender, "automation@example.invalid")
         self.assertEqual(recipients, ["verified-sb@example.invalid"])
         self.assertEqual(len(list(message.iter_attachments())), 3)
         persisted = load_automation_state(self.state_path)
@@ -272,7 +287,8 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
             self.pipeline.process(
                 self.state_path,
                 MondayFileChange(
-                    item_id="3059999999",
+                    tenant_id=TENANT_ID,
+                    item_id="9999",
                     case_id="pilot-pv-001",
                     column_id="file_tag",
                 ),
@@ -290,6 +306,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
             self.pipeline.process(
                 self.state_path,
                 MondayFileChange(
+                    tenant_id=TENANT_ID,
                     item_id=ITEM_ID,
                     case_id="different-case",
                     column_id="file_tag",
@@ -304,7 +321,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
     def test_wrong_state_source_or_board_is_rejected_before_monday_access(self):
         invalid_values = (
             ("source", "other", "source must be monday"),
-            ("board_id", "5099999999", "board does not match"),
+            ("board_id", "9999", "board does not match"),
         )
 
         for field, value, expected_error in invalid_values:
@@ -318,6 +335,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
                     self.pipeline.process(
                         self.state_path,
                         MondayFileChange(
+                            tenant_id=TENANT_ID,
                             item_id=ITEM_ID,
                             case_id="pilot-pv-001",
                             column_id="file_tag",
@@ -336,6 +354,7 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
         blocked = pipeline.process(
             self.state_path,
             MondayFileChange(
+                tenant_id=TENANT_ID,
                 item_id=ITEM_ID,
                 case_id="pilot-pv-001",
                 column_id="file_schema",
@@ -354,6 +373,54 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
             "delivery_in_doubt",
         )
         self.assertNotIn("https://", str(persisted["delivery_outbox"]))
+
+    def test_cross_tenant_event_is_rejected_before_monday_access(self):
+        before = self.state_path.read_bytes()
+
+        with self.assertRaisesRegex(WorkflowError, "tenant_id does not match"):
+            self.pipeline.process(
+                self.state_path,
+                MondayFileChange(
+                    tenant_id="tenant-other-001",
+                    item_id=ITEM_ID,
+                    case_id="pilot-pv-001",
+                    column_id="file_tag",
+                ),
+                self.verification("file_tag"),
+            )
+
+        self.assertEqual(self.graphql_calls, [])
+        self.assertEqual(self.download_calls, [])
+        self.assertEqual(self.state_path.read_bytes(), before)
+
+    def test_collector_tenant_must_match_runtime_before_monday_access(self):
+        config = copy.deepcopy(self.automation_config)
+        config["expected_tenant_id"] = "tenant-other-001"
+
+        with self.assertRaisesRegex(WorkflowError, "tenant do not match"):
+            DurableMondayEmailPipeline(self.collector, config)
+
+        self.assertEqual(self.graphql_calls, [])
+
+    def test_unresolved_outbox_does_not_bypass_tenant_check(self):
+        pipeline, calls, _ = self.create_uncertain_delivery()
+        monday_calls = len(self.graphql_calls)
+
+        with self.assertRaisesRegex(WorkflowError, "tenant_id does not match"):
+            pipeline.process(
+                self.state_path,
+                MondayFileChange(
+                    tenant_id="tenant-other-001",
+                    item_id=ITEM_ID,
+                    case_id="pilot-pv-001",
+                    column_id="file_schema",
+                    grid_operator_practices_accepted=True,
+                ),
+                self.verification("file_schema"),
+            )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(len(self.graphql_calls), monday_calls)
 
     def test_confirmed_delivery_reconciliation_completes_without_resending(self):
         pipeline, calls, idempotency_key = self.create_uncertain_delivery()

@@ -1,10 +1,10 @@
-name: Gmail Monday attachments self-test
+name: Gmail Monday attachments tenant self-test
 
 on:
   workflow_dispatch:
     inputs:
       confirm_send:
-        description: Type SEND-MONDAY-TO-SELF to send one email to Marvin Gmail
+        description: Type SEND-MONDAY-TO-SELF to send one email to the configured tenant mailbox
         required: true
         type: string
       ia_url:
@@ -48,9 +48,14 @@ jobs:
       - name: Check out the verified adapter
         uses: actions/checkout@v4
 
-      - name: Send verified Monday PDFs to Marvin Gmail
+      - name: Send verified Monday PDFs to the configured tenant mailbox
         env:
           GMAIL_SMTP_PASSWORD: ${{ secrets.GMAIL_SMTP_PASSWORD }}
+          WORKFLOWOS_TENANT_ID: ${{ vars.WORKFLOWOS_TENANT_ID }}
+          WORKFLOWOS_GMAIL_USERNAME: ${{ vars.WORKFLOWOS_GMAIL_USERNAME }}
+          WORKFLOWOS_GMAIL_FROM: ${{ vars.WORKFLOWOS_GMAIL_USERNAME }}
+          WORKFLOWOS_GMAIL_FROM_NAME: ${{ vars.WORKFLOWOS_GMAIL_FROM_NAME }}
+          WORKFLOWOS_ORGANIZATION_ROLE: ${{ vars.WORKFLOWOS_ORGANIZATION_ROLE }}
           WORKFLOWOS_GMAIL_LIVE_ENABLED: "true"
           IA_URL: ${{ inputs.ia_url }}
           IA_SHA256: ${{ inputs.ia_sha256 }}
@@ -67,11 +72,7 @@ jobs:
           import urllib.parse
           import urllib.request
 
-          from workflowos.gmail_email import (
-              DEFAULT_GMAIL_ADDRESS,
-              GmailSmtpConfig,
-              GmailSmtpSender,
-          )
+          from workflowos.gmail_email import GmailSmtpConfig, GmailSmtpSender
           from workflowos.hostpoint_email import EmailAttachment
 
           ALLOWED_HOST = "prod-euc1-files-monday-com.s3.eu-central-1.amazonaws.com"
@@ -125,10 +126,12 @@ jobs:
               document_types.append(document_type)
 
           idempotency_key = hashlib.sha256("|".join(hashes).encode("ascii")).hexdigest()
+          gmail_config = GmailSmtpConfig.from_environment()
           email_request = {
               "source": "workflowos",
-              "from_organization_role": "af_elektro",
-              "recipient_email": DEFAULT_GMAIL_ADDRESS,
+              "tenant_id": gmail_config.tenant_id,
+              "from_organization_role": gmail_config.organization_role,
+              "recipient_email": gmail_config.username,
               "case_id": "monday-attachment-self-test",
               "template": "accepted_grid_documents",
               "attachment_document_types": document_types,
@@ -138,13 +141,13 @@ jobs:
           }
 
           sender = GmailSmtpSender(
-              GmailSmtpConfig.from_environment(),
+              gmail_config,
               lambda locator: attachments[locator],
           )
           result = sender(email_request)
           if (
               result.get("delivery_status") != "sent"
-              or result.get("recipient_email") != DEFAULT_GMAIL_ADDRESS
+              or result.get("recipient_email") != gmail_config.username
           ):
               raise SystemExit("Gmail did not confirm the fixed self-test delivery")
           print("Gmail accepted one self-test email with 3 verified Monday PDF attachments.")

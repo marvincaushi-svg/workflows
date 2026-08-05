@@ -28,6 +28,7 @@ DEFAULT_ASSET_HOSTS = (
     "prod-euc1-files-monday-com.s3.eu-central-1.amazonaws.com",
 )
 MAX_MONDAY_FILE_BYTES = 10 * 1024 * 1024
+TENANT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,79}$")
 LOCATOR_RE = re.compile(
     r"^monday-asset://(?P<board>\d+)/(?P<item>\d+)/"
     r"(?P<column>[A-Za-z0-9_]+)/(?P<asset>\d+)$"
@@ -78,6 +79,7 @@ class MondayReadOnlyConfig:
     """Tenant-specific Monday identifiers and a secret API token."""
 
     api_token: str = field(repr=False)
+    tenant_id: str
     expected_board_id: str
     document_columns: Mapping[str, str]
     allowed_asset_hosts: tuple[str, ...] = DEFAULT_ASSET_HOSTS
@@ -87,6 +89,8 @@ class MondayReadOnlyConfig:
     def __post_init__(self) -> None:
         if not self.api_token or any(char in self.api_token for char in "\r\n"):
             raise WorkflowError("Monday API token is required")
+        if not TENANT_ID_RE.fullmatch(self.tenant_id):
+            raise WorkflowError("Monday tenant id is invalid")
         if not self.expected_board_id.isdigit():
             raise WorkflowError("Monday board id must be numeric")
         if self.api_url != MONDAY_API_URL:
@@ -136,6 +140,7 @@ class MondayReadOnlyConfig:
         ) or DEFAULT_ASSET_HOSTS
         return cls(
             api_token=values.get("MONDAY_API_TOKEN", ""),
+            tenant_id=values.get("WORKFLOWOS_TENANT_ID", ""),
             expected_board_id=values.get("WORKFLOWOS_MONDAY_BOARD_ID", ""),
             document_columns=columns,
             allowed_asset_hosts=hosts,
@@ -232,6 +237,7 @@ class MondayReadOnlyCollector:
         """Return the non-secret board/column binding used by the collector."""
 
         return {
+            "tenant_id": self._config.tenant_id,
             "expected_board_id": self._config.expected_board_id,
             "document_columns": dict(self._config.document_columns),
         }
@@ -252,6 +258,7 @@ class MondayReadOnlyCollector:
         attachment = self._download_record(record)
         attachment_ref = hashlib.sha256(attachment.content).hexdigest()
         event_payload = {
+            "tenant_id": self._config.tenant_id,
             "board_id": record.board_id,
             "item_id": record.item_id,
             "column_id": record.column_id,
@@ -266,6 +273,7 @@ class MondayReadOnlyCollector:
         return {
             "source": "monday",
             "event_type": "file_column_changed",
+            "tenant_id": self._config.tenant_id,
             "board_id": record.board_id,
             "item_id": record.item_id,
             "case_id": normalized_case_id,

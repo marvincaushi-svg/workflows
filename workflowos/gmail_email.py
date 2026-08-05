@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import smtplib
 import ssl
 from collections.abc import Mapping
@@ -18,9 +19,10 @@ from .hostpoint_email import AttachmentLoader, EmailAttachment, SmtpFactory, _st
 
 GMAIL_SMTP_HOST = "smtp.gmail.com"
 GMAIL_SMTP_STARTTLS_PORT = 587
-DEFAULT_GMAIL_ADDRESS = "marvin.caushi@gmail.com"
+DEFAULT_GMAIL_ADDRESS = ""
 MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024
 SUPPORTED_TEMPLATES = {"accepted_grid_documents", "signed_safety_report"}
+TENANT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,79}$")
 
 
 @dataclass(frozen=True)
@@ -28,15 +30,18 @@ class GmailSmtpConfig:
     """Validated Gmail settings; the app password is hidden from repr."""
 
     password: str = field(repr=False)
+    tenant_id: str
     username: str = DEFAULT_GMAIL_ADDRESS
     from_address: str = DEFAULT_GMAIL_ADDRESS
-    from_name: str = "A&F Elektro GmbH"
-    organization_role: str = "af_elektro"
+    from_name: str = ""
+    organization_role: str = ""
     host: str = GMAIL_SMTP_HOST
     port: int = GMAIL_SMTP_STARTTLS_PORT
     timeout_seconds: float = 30.0
 
     def __post_init__(self) -> None:
+        if not TENANT_ID_RE.fullmatch(self.tenant_id):
+            raise WorkflowError("Gmail tenant id is invalid")
         if self.host != GMAIL_SMTP_HOST or self.port != GMAIL_SMTP_STARTTLS_PORT:
             raise WorkflowError("Gmail SMTP must use smtp.gmail.com STARTTLS on port 587")
         if "@" not in self.username or any(char in self.username for char in "\r\n"):
@@ -71,12 +76,11 @@ class GmailSmtpConfig:
             raise WorkflowError("WORKFLOWOS_GMAIL_TIMEOUT_SECONDS must be numeric") from exc
         return cls(
             password=values.get("GMAIL_SMTP_PASSWORD", ""),
+            tenant_id=values.get("WORKFLOWOS_TENANT_ID", ""),
             username=values.get("WORKFLOWOS_GMAIL_USERNAME", DEFAULT_GMAIL_ADDRESS),
             from_address=values.get("WORKFLOWOS_GMAIL_FROM", DEFAULT_GMAIL_ADDRESS),
-            from_name=values.get("WORKFLOWOS_GMAIL_FROM_NAME", "A&F Elektro GmbH"),
-            organization_role=values.get(
-                "WORKFLOWOS_ORGANIZATION_ROLE", "af_elektro"
-            ),
+            from_name=values.get("WORKFLOWOS_GMAIL_FROM_NAME", ""),
+            organization_role=values.get("WORKFLOWOS_ORGANIZATION_ROLE", ""),
             host=values.get("WORKFLOWOS_GMAIL_HOST", GMAIL_SMTP_HOST),
             port=int(values.get("WORKFLOWOS_GMAIL_PORT", str(GMAIL_SMTP_STARTTLS_PORT))),
             timeout_seconds=timeout,
@@ -128,6 +132,8 @@ class GmailSmtpSender:
     def _build_message(self, request: dict[str, Any]) -> tuple[EmailMessage, str]:
         if request.get("source") != "workflowos":
             raise WorkflowError("SMTP request source must be workflowos")
+        if request.get("tenant_id") != self._config.tenant_id:
+            raise WorkflowError("SMTP request tenant does not match Gmail config")
         if request.get("from_organization_role") != self._config.organization_role:
             raise WorkflowError("SMTP request sender role does not match tenant config")
 

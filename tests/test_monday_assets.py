@@ -20,14 +20,15 @@ from workflowos.monday_assets import (
 )
 
 
-BOARD_ID = "5090000000"
-ITEM_ID = "3050000000"
+BOARD_ID = "1001"
+ITEM_ID = "2001"
 COLUMN_ID = "file_tag"
-ASSET_ID = "250000001"
+ASSET_ID = "3001"
+TENANT_ID = "tenant-test-001"
 PDF = b"%PDF-1.7\nverified-test-pdf"
 PUBLIC_URL = (
-    "https://prod-euc1-files-monday-com.s3.eu-central-1.amazonaws.com/"
-    "sanitized/resources/250000001/TAG.pdf?temporary-signature=redacted"
+    "https://assets.example.invalid/"
+    "test/resources/3001/TAG.pdf?temporary-signature=redacted"
 )
 
 
@@ -35,6 +36,7 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.config = MondayReadOnlyConfig(
             api_token="test-token",
+            tenant_id=TENANT_ID,
             expected_board_id=BOARD_ID,
             document_columns={
                 COLUMN_ID: "tag_grid_connection_application",
@@ -42,6 +44,7 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
                 "file_schema": "single_line_diagram",
                 "file_sina": "safety_report_rasi_sina",
             },
+            allowed_asset_hosts=("assets.example.invalid",),
         )
         self.graphql_calls = []
         self.download_calls = []
@@ -96,6 +99,7 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
         )
 
         self.assertEqual(event["source"], "monday")
+        self.assertEqual(event["tenant_id"], TENANT_ID)
         self.assertEqual(event["board_id"], BOARD_ID)
         self.assertEqual(event["item_id"], ITEM_ID)
         self.assertEqual(event["column_id"], COLUMN_ID)
@@ -127,7 +131,7 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
         self.assertEqual(len(self.download_calls), 2)
 
     def test_multiple_files_require_the_exact_asset_id(self):
-        second_id = "250000002"
+        second_id = "3002"
         self.files.append(self.asset_file(second_id, "TAG-approved.pdf"))
         with self.assertRaisesRegex(WorkflowError, "exactly one"):
             self.collector().collect_file_event(
@@ -143,7 +147,7 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
         self.assertTrue(event["asset_locator"].endswith(f"/{second_id}"))
 
     def test_item_from_another_board_is_rejected_before_download(self):
-        self.board_id = "5099999999"
+        self.board_id = "9999"
         with self.assertRaisesRegex(WorkflowError, "different board"):
             self.collector().collect_file_event(
                 item_id=ITEM_ID, case_id="case-1", column_id=COLUMN_ID
@@ -172,7 +176,7 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
         blocked_targets = (
             "https://example.com/redirected.pdf",
             PUBLIC_URL.replace("https://", "http://"),
-            PUBLIC_URL.replace(".com/", ".com:444/"),
+            PUBLIC_URL.replace("example.invalid/", "example.invalid:444/"),
         )
 
         for target in blocked_targets:
@@ -315,12 +319,46 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
         config = MondayReadOnlyConfig.from_environment(
             {
                 "MONDAY_API_TOKEN": "secret",
+                "WORKFLOWOS_TENANT_ID": TENANT_ID,
                 "WORKFLOWOS_MONDAY_BOARD_ID": BOARD_ID,
                 "WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS": json.dumps(columns),
             }
         )
         self.assertEqual(config.document_columns, columns)
+        self.assertEqual(config.tenant_id, TENANT_ID)
         self.assertEqual(config.allowed_asset_hosts, DEFAULT_ASSET_HOSTS)
+
+    def test_tenant_id_is_required_and_has_no_product_default(self):
+        columns = json.dumps(self.config.document_columns)
+        with self.assertRaisesRegex(WorkflowError, "tenant id"):
+            MondayReadOnlyConfig.from_environment(
+                {
+                    "MONDAY_API_TOKEN": "secret",
+                    "WORKFLOWOS_MONDAY_BOARD_ID": BOARD_ID,
+                    "WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS": columns,
+                }
+            )
+
+    def test_tenant_changes_event_identity(self):
+        first = self.collector().collect_file_event(
+            item_id=ITEM_ID, case_id="case-1", column_id=COLUMN_ID
+        )
+        other_config = MondayReadOnlyConfig(
+            api_token="test-token",
+            tenant_id="tenant-other-001",
+            expected_board_id=BOARD_ID,
+            document_columns=self.config.document_columns,
+            allowed_asset_hosts=("assets.example.invalid",),
+        )
+        second = MondayReadOnlyCollector(
+            other_config,
+            graphql_transport=self.graphql,
+            download_transport=self.download,
+        ).collect_file_event(
+            item_id=ITEM_ID, case_id="case-1", column_id=COLUMN_ID
+        )
+
+        self.assertNotEqual(first["event_ref_sha256"], second["event_ref_sha256"])
 
 
 if __name__ == "__main__":
