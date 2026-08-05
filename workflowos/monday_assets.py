@@ -171,6 +171,33 @@ GraphqlTransport = Callable[[str, dict[str, Any], str], dict[str, Any]]
 DownloadTransport = Callable[[str, int], DownloadedAsset]
 
 
+class _ApprovedAssetRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Validate every redirect target before urllib opens the next connection."""
+
+    def __init__(self, validate_url: Callable[[str], None]) -> None:
+        super().__init__()
+        self._validate_url = validate_url
+
+    def redirect_request(
+        self,
+        request: urllib.request.Request,
+        file_pointer: Any,
+        code: int,
+        message: str,
+        headers: Mapping[str, str],
+        new_url: str,
+    ) -> urllib.request.Request | None:
+        self._validate_url(new_url)
+        return super().redirect_request(
+            request,
+            file_pointer,
+            code,
+            message,
+            headers,
+            new_url,
+        )
+
+
 class MondayReadOnlyCollector:
     """Resolve one exact Monday file-column asset without any write operation."""
 
@@ -398,13 +425,15 @@ class MondayReadOnlyCollector:
             raise WorkflowError("Monday read-only API response has no data")
         return data
 
-    @staticmethod
-    def _download(url: str, max_bytes: int) -> DownloadedAsset:
+    def _download(self, url: str, max_bytes: int) -> DownloadedAsset:
         request = urllib.request.Request(
             url, headers={"User-Agent": "MERAVIQA-Monday-ReadOnly/1.0"}
         )
+        opener = urllib.request.build_opener(
+            _ApprovedAssetRedirectHandler(self._validate_asset_url)
+        )
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with opener.open(request, timeout=30) as response:
                 content = response.read(max_bytes + 1)
                 final_url = response.geturl()
                 content_type = response.headers.get("Content-Type")
