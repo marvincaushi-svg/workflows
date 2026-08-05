@@ -14,6 +14,8 @@ from .monday_pipeline import (
     DeliveryReconciliation,
     DurableMondayEmailPipeline,
     MondayFileChange,
+    inspect_delivery_outbox,
+    reconcile_delivery_state,
 )
 from .technical_review import (
     configure_sb_document_handoff,
@@ -44,6 +46,8 @@ __all__ = [
     "DurableMondayEmailPipeline",
     "DeliveryReconciliation",
     "MondayFileChange",
+    "inspect_delivery_outbox",
+    "reconcile_delivery_state",
     "record_monday_document_notification",
     "record_sb_email_delivery",
     "load_document",
