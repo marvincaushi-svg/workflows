@@ -137,6 +137,28 @@ Tre esiti possibili, tutti previsti:
   il motore lo impedisce apposta, perché un secondo tentativo cieco potrebbe
   duplicare il file.
 
+### Alternativa: la fase 3 come GitHub Action
+
+Se preferisci non maneggiare il token in locale, il collaudo può girare su GitHub
+con il token nei Secrets. Configura una volta sola:
+
+- **Secret** `MONDAY_API_TOKEN`
+- **Variables** `WORKFLOWOS_TENANT_ID`, `WORKFLOWOS_MONDAY_BOARD_ID`,
+  `WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS`
+
+Poi lancia a mano il workflow **Monday upload collaudo**, indicando l'item di
+prova, la colonna, e digitando `UPLOAD-TEST-PDF` per confermare.
+
+Il workflow, in ordine: esegue i test unitari, verifica il binding **senza**
+caricare, genera un PDF minuscolo **dentro il runner** — non carica mai un
+documento reale — lo pubblica, interpreta l'esito e infine **richiede a Monday**
+cosa sia effettivamente arrivato sulla colonna, confrontando dimensione e nome
+con ciò che il motore dichiara di aver trasmesso.
+
+I tre esiti sono gli stessi della fase 3 manuale e vengono riassunti nella
+pagina del run. Il workflow non parte mai da solo: è `workflow_dispatch` e
+protetto dalla stringa di conferma, invariante verificata da un test.
+
 ---
 
 ## Fase 4 — Riconciliazione di un caricamento incerto

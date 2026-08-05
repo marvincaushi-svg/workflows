@@ -1,0 +1,233 @@
+name: Monday upload collaudo
+
+# Exercises the one path that no simulation can validate: whether monday.com
+# accepts the multipart body the uploader builds. It uploads a PDF generated
+# in the runner, never a real document, and it must be pointed at a disposable
+# test item. Nothing here runs on a schedule or on push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_upload:
+        description: Type UPLOAD-TEST-PDF to upload one generated PDF to the test item
+        required: true
+        type: string
+      monday_item_id:
+        description: Numeric id of a DISPOSABLE test item, never a real case
+        required: true
+        type: string
+      monday_column_id:
+        description: File column id to write into, e.g. the TAG column
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monday-upload-collaudo
+  cancel-in-progress: false
+
+jobs:
+  upload-one-generated-pdf:
+    if: ${{ inputs.confirm_upload == 'UPLOAD-TEST-PDF' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # Inputs reach the shell through the environment, never through direct
+      # interpolation into a run script.
+      MONDAY_ITEM_ID: ${{ inputs.monday_item_id }}
+      MONDAY_COLUMN_ID: ${{ inputs.monday_column_id }}
+      MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+      WORKFLOWOS_TENANT_ID: ${{ vars.WORKFLOWOS_TENANT_ID }}
+      WORKFLOWOS_MONDAY_BOARD_ID: ${{ vars.WORKFLOWOS_MONDAY_BOARD_ID }}
+      WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS: ${{ vars.WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS }}
+
+    steps:
+      - name: Check out the engine under test
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run the unit tests first
+        run: python -m unittest discover -s tests
+
+      - name: Verify the write binding without uploading anything
+        env:
+          WORKFLOWOS_MONDAY_UPLOAD_ENABLED: "false"
+        run: |
+          python -m workflowos.cli check-monday-upload --item-id "$MONDAY_ITEM_ID"
+
+      - name: Generate a disposable PDF inside the runner
+        run: |
+          printf '%%PDF-1.7\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%%%EOF\n' \
+            > "${RUNNER_TEMP}/collaudo.pdf"
+          echo "sha256: $(sha256sum "${RUNNER_TEMP}/collaudo.pdf" | cut -d' ' -f1)"
+          echo "bytes:  $(stat -c%s "${RUNNER_TEMP}/collaudo.pdf")"
+
+      - name: Upload it through the engine
+        env:
+          WORKFLOWOS_MONDAY_UPLOAD_ENABLED: "true"
+        run: |
+          # The outcome is interpreted in the next step, so a non-zero exit
+          # here must not hide the diagnosis.
+          python -m workflowos.cli archive-document \
+            --archive-root "${RUNNER_TEMP}/archivio" \
+            --tenant-id "$WORKFLOWOS_TENANT_ID" \
+            --case-id collaudo-001 \
+            --case-name "COLLAUDO MERAVIQA" \
+            --monday-item-id "$MONDAY_ITEM_ID" \
+            --monday-column-id "$MONDAY_COLUMN_ID" \
+            --document-type tag_grid_connection_application \
+            --pdf "${RUNNER_TEMP}/collaudo.pdf" \
+            --publish-to-monday \
+            > "${RUNNER_TEMP}/result.json" 2> "${RUNNER_TEMP}/error.txt" || true
+          cat "${RUNNER_TEMP}/result.json" "${RUNNER_TEMP}/error.txt"
+
+      - name: Interpret the outcome
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          temporary = pathlib.Path(os.environ["RUNNER_TEMP"])
+          raw = (temporary / "result.json").read_text(encoding="utf-8").strip()
+          error = (temporary / "error.txt").read_text(encoding="utf-8").strip()
+          summary = pathlib.Path(os.environ["GITHUB_STEP_SUMMARY"])
+
+          def report(title: str, detail: str) -> None:
+              summary.write_text(f"## {title}\n\n{detail}\n", encoding="utf-8")
+              print(f"{title}\n\n{detail}")
+
+          if not raw:
+              report(
+                  "Collaudo failed before the engine produced a result",
+                  f"The command wrote nothing to stdout.\n\n```\n{error}\n```",
+              )
+              raise SystemExit(1)
+
+          result = json.loads(raw)
+          status = result.get("monday_status")
+
+          if result.get("monday_uploaded"):
+              report(
+                  "monday.com accepted the multipart upload",
+                  "The last unvalidated path in the uploader is now proven "
+                  "against the real API.\n\n"
+                  f"- checksum: `{result['content_sha256']}`\n"
+                  f"- upload attempts: {result['upload_attempts']}\n\n"
+                  "Delete the test item when you are done.",
+              )
+              raise SystemExit(0)
+
+          if status == "pending":
+              report(
+                  "Refused before transmission - nothing was sent",
+                  "The engine refused the upload while it was still certain no "
+                  "byte had left the process, so no evidence is needed to retry: "
+                  "fix the configuration and run again.\n\n"
+                  f"- refused attempts: {result.get('refused_attempts')}\n\n"
+                  f"```\n{error}\n```",
+              )
+              raise SystemExit(1)
+
+          if status == "upload_in_doubt":
+              report(
+                  "Uncertain outcome - do NOT run this again",
+                  "The connection dropped after transmission started, so the "
+                  "engine cannot know whether monday.com stored the file. Check "
+                  "the column by hand, then reconcile with evidence using "
+                  "`reconcile-monday-upload`. A blind retry could duplicate the "
+                  "file, which is why the engine blocks it.\n\n"
+                  f"```\n{error}\n```",
+              )
+              raise SystemExit(1)
+
+          report(
+              f"Unexpected outcome: {status}",
+              f"```\n{raw}\n\n{error}\n```",
+          )
+          raise SystemExit(1)
+          PY
+
+      - name: Confirm from monday.com what actually arrived
+        if: ${{ success() }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          result = json.loads(
+              (pathlib.Path(os.environ["RUNNER_TEMP"]) / "result.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          query = """
+          query CollaudoVerify($itemIds: [ID!]!, $columnIds: [String!]) {
+            items(ids: $itemIds) {
+              id
+              column_values(ids: $columnIds) {
+                id
+                ... on FileValue {
+                  files {
+                    ... on FileAssetValue {
+                      asset_id
+                      asset { name file_size }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          """
+          request = urllib.request.Request(
+              "https://api.monday.com/v2",
+              data=json.dumps(
+                  {
+                      "query": query,
+                      "variables": {
+                          "itemIds": [os.environ["MONDAY_ITEM_ID"]],
+                          "columnIds": [os.environ["MONDAY_COLUMN_ID"]],
+                      },
+                  }
+              ).encode("utf-8"),
+              headers={
+                  "Authorization": os.environ["MONDAY_API_TOKEN"],
+                  "Content-Type": "application/json",
+                  "User-Agent": "MERAVIQA-Collaudo/1.0",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              payload = json.load(response)
+
+          files = payload["data"]["items"][0]["column_values"][0]["files"]
+          if not files:
+              raise SystemExit(
+                  "The engine reported success but the column is empty. "
+                  "The confirmation cannot be trusted - investigate before "
+                  "enabling uploads."
+              )
+
+          expected = os.path.getsize(
+              pathlib.Path(os.environ["RUNNER_TEMP"]) / "collaudo.pdf"
+          )
+          print("Files now on the column:")
+          for entry in files:
+              asset = entry["asset"]
+              print(f"  asset {entry['asset_id']}: {asset['name']} "
+                    f"({asset['file_size']} bytes)")
+              if asset["file_size"] != expected:
+                  print(
+                      f"  NOTE: monday.com reports {asset['file_size']} bytes "
+                      f"while the engine transmitted {expected}. The engine "
+                      "treats a mismatch as a failure, so this assumption needs "
+                      "revisiting."
+                  )
+          print(f"\nEngine checksum: {result['content_sha256']}")
+          PY
