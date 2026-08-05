@@ -39,6 +39,22 @@ Il raccoglitore `workflowos.monday_assets` interroga Monday esclusivamente con u
 
 Il pipeline `workflowos.monday_pipeline` è il percorso applicativo consigliato: collega direttamente il raccoglitore in sola lettura, il controllo documentale, lo stato atomico e l'adapter email. Verifica che bacheca e colonne del collector coincidano con la configurazione del tenant e usa un lock per serializzare gli eventi della stessa commessa. Ogni risultato di verifica deve indicare commessa, tipo di documento e hash SHA-256 del PDF esaminato; se uno dei tre non coincide con l'asset Monday appena risolto, il documento viene bloccato. Prima di un invio live registra un outbox persistente; se la connessione cade dopo l'avvio SMTP, lo stato diventa `delivery_in_doubt` e MERAVIQA blocca ogni ritentativo automatico. La riconciliazione richiede una prova con hash, operatore e timestamp: una consegna confermata completa lo stato senza reinviare, mentre un mancato invio confermato abilita un solo ritentativo esplicito usando la richiesta persistita e ricontrollata.
 
+L'outbox può essere ispezionato senza mostrare destinatario, corpo o allegati. La riconciliazione registra soltanto riferimenti non sensibili e non apre connessioni verso Monday o SMTP:
+
+```bash
+python -m workflowos.cli inspect-email-outbox --state /percorso/stato.json
+
+python -m workflowos.cli reconcile-email-delivery \
+  --state /percorso/stato.json \
+  --idempotency-key HASH_SHA256 \
+  --outcome confirmed-not-sent \
+  --checked-at 2026-08-05T01:30:00+02:00 \
+  --checked-by-ref RIFERIMENTO_OPERATORE \
+  --evidence-ref-sha256 HASH_SHA256_PROVA
+```
+
+Per `confirmed-sent` è obbligatorio anche `--message-ref-sha256`. Il comando aggiorna lo stato ma non invia email: l'eventuale retry resta un'azione distinta, esplicita e protetta dall'adapter configurato.
+
 L'adapter `workflowos.hostpoint_email` collega un account aziendale Hostpoint tramite SMTP STARTTLS. Account, mittente, nome aziendale e ruolo provengono dalla configurazione del tenant; il mittente deve coincidere con l'account autenticato. L'adapter verifica nuovamente l'hash SHA-256 di ogni allegato scaricato da Monday, blocca duplicati e invii oltre 20 MB e registra la consegna soltanto dopo l'accettazione del server SMTP. Il provider resta fissato a `asmtp.mail.hostpoint.ch:587`; la password viene letta dall'ambiente e non deve essere inserita nel repository. A&F è soltanto il profilo pilota predefinito.
 
 ### Configurazione Hostpoint locale
