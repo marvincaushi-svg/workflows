@@ -82,6 +82,16 @@ python -m workflowos.cli reconcile-monday-upload \
 
 Ogni voce indica l'azione richiesta: `publish_monday_upload`, `reconcile_monday_upload`, `retry_monday_upload` oppure `none`. La riconciliazione ricostruisce il legame del documento dal manifest e dal PDF archiviato, quindi non può essere dirottata verso un altro item o un'altra colonna Monday; viene eseguita senza adapter di pubblicazione e non apre alcuna connessione. `confirmed-uploaded` chiude la voce, `confirmed-not-uploaded` autorizza un solo ritentativo esplicito, che resta un'azione distinta con l'adapter Monday configurato.
 
+L'adapter `workflowos.monday_uploads` è l'unico componente autorizzato a scrivere un file su Monday ed è disattivato finché `WORKFLOWOS_MONDAY_UPLOAD_ENABLED=true` non viene impostato esplicitamente. Riusa bacheca e colonne del profilo tenant: rifiuta una colonna non configurata prima di qualsiasi richiesta e, prima di trasmettere un solo byte, verifica con una query in sola lettura che l'item appartenga alla bacheca attesa, così un PDF non può finire nella commessa di un altro tenant. Item e colonna raggiungono la mutation già vincolati a cifre e a un identificatore alfanumerico configurato, quindi non possono introdurre sintassi GraphQL. L'endpoint file resta fissato a `https://api.monday.com/v2/file` e ogni redirect della richiesta autenticata viene rifiutato. La conferma restituita dichiara ciò che Monday ha effettivamente accettato — l'id dell'asset creato e, quando riportata, la dimensione memorizzata confrontata con quella trasmessa; l'hash presente nella conferma è il digest dei byte inviati, perché Monday non restituisce un checksum lato server.
+
+Il binding può essere verificato senza caricare nulla:
+
+```bash
+python -m workflowos.cli check-monday-upload --item-id ID_ITEM_MONDAY
+```
+
+Il comando esegue soltanto la query di verifica: non richiede l'interruttore di caricamento e non scrive su Monday.
+
 L'adapter `workflowos.hostpoint_email` collega un account aziendale Hostpoint tramite SMTP STARTTLS. Account, mittente, nome aziendale e ruolo provengono dalla configurazione del tenant; il mittente deve coincidere con l'account autenticato. L'adapter verifica nuovamente l'hash SHA-256 di ogni allegato scaricato da Monday, blocca duplicati e invii oltre 20 MB e registra la consegna soltanto dopo l'accettazione del server SMTP. Il provider resta fissato a `asmtp.mail.hostpoint.ch:587`; la password viene letta dall'ambiente e non deve essere inserita nel repository. A&F è soltanto il profilo pilota predefinito.
 
 ### Configurazione Hostpoint locale
@@ -166,6 +176,7 @@ I test coprono:
 - adapter SMTP Hostpoint configurabile per tenant, con STARTTLS, identità autenticata coincidente, controllo hash, duplicati e limite allegati di 20 MB.
 - adapter Gmail configurabile per tenant, con mittente autenticato coincidente, firma aziendale e ruolo verificato.
 - ispezione dell'archivio in sola lettura e riconciliazione dei caricamenti Monday incerti, con legame documentale ricostruito dal manifest e nessun accesso a Monday.
+- caricamento Monday protetto da interruttore esplicito, con verifica della bacheca prima dell'invio, rifiuto dei redirect, blocco delle colonne non configurate e controllo della dimensione memorizzata.
 
 ## Confini delle responsabilità
 

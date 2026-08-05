@@ -32,6 +32,7 @@ from .monday_pipeline import (
     inspect_delivery_outbox,
     reconcile_delivery_state,
 )
+from .monday_uploads import MondayGuardedUploader, MondayUploadConfig
 from .technical_review import create_remediation_plan, evaluate_technical_review
 
 
@@ -216,6 +217,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Non-sensitive operator or procedure reference",
     )
     archive_reconcile_parser.add_argument("--evidence-ref-sha256", required=True)
+
+    upload_check_parser = subparsers.add_parser(
+        "check-monday-upload",
+        help="Verify the Monday write binding without uploading a file",
+    )
+    upload_check_parser.add_argument(
+        "--item-id", required=True, help="Monday item id to verify"
+    )
     return parser
 
 
@@ -340,6 +349,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ),
             )
             result = reconciled["result"]
+        elif args.command == "check-monday-upload":
+            config = MondayUploadConfig.from_environment(require_live_enabled=False)
+            result = MondayGuardedUploader(config).verify_binding(args.item_id)
         else:
             parser.error(f"Unsupported command: {args.command}")
             return 2
