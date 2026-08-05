@@ -322,3 +322,124 @@ class AutomationControlPlaneTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DocumentArchiveHealthTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        cls.tenant_id = cls.catalog["tenant"]["id"]
+
+    def entry(self, **changes):
+        values = {
+            "tenant_id": self.tenant_id,
+            "case_id": "case-042",
+            "content_sha256": "a" * 64,
+            "document_type": "tag_grid_connection_application",
+            "monday_status": "upload_in_doubt",
+            "upload_attempts": 1,
+            "refused_attempts": 0,
+            "action_required": "reconcile_monday_upload",
+        }
+        values.update(changes)
+        return values
+
+    def report(self, *entries):
+        return {
+            "status": "ok",
+            "entry_count": len(entries),
+            "unresolved_count": len(entries),
+            "entries": list(entries),
+        }
+
+    def health(self, archive_report):
+        return build_health_report(
+            self.catalog,
+            state=None,
+            at="2026-08-04T06:01:00Z",
+            archive_report=archive_report,
+        )
+
+    def test_archive_is_absent_until_a_root_is_inspected(self):
+        health = self.health(None)
+
+        self.assertFalse(health["document_archive"]["configured"])
+        self.assertEqual(health["document_archive"]["unresolved_count"], 0)
+        self.assertEqual(health["status"], "healthy")
+
+    def test_document_awaiting_reconciliation_requires_attention(self):
+        health = self.health(self.report(self.entry()))
+
+        archive = health["document_archive"]
+        self.assertEqual(health["status"], "attention_required")
+        self.assertEqual(len(archive["awaiting_reconciliation"]), 1)
+        self.assertEqual(
+            archive["awaiting_reconciliation"][0]["case_id"], "case-042"
+        )
+        self.assertEqual(archive["awaiting_retry"], [])
+
+    def test_document_awaiting_authorized_retry_requires_attention(self):
+        health = self.health(
+            self.report(
+                self.entry(
+                    monday_status="retry_authorized",
+                    action_required="retry_monday_upload",
+                )
+            )
+        )
+
+        self.assertEqual(health["status"], "attention_required")
+        self.assertEqual(len(health["document_archive"]["awaiting_retry"]), 1)
+
+    def test_plain_publication_backlog_is_not_an_alert(self):
+        health = self.health(
+            self.report(
+                self.entry(
+                    monday_status="pending",
+                    upload_attempts=0,
+                    action_required="publish_monday_upload",
+                )
+            )
+        )
+
+        archive = health["document_archive"]
+        self.assertEqual(health["status"], "healthy")
+        self.assertEqual(len(archive["awaiting_publication"]), 1)
+        self.assertEqual(archive["refused_documents"], 0)
+
+    def test_repeated_refusal_is_a_configuration_fault(self):
+        health = self.health(
+            self.report(
+                self.entry(
+                    monday_status="pending",
+                    upload_attempts=0,
+                    refused_attempts=3,
+                    action_required="publish_monday_upload",
+                )
+            )
+        )
+
+        self.assertEqual(health["status"], "attention_required")
+        self.assertEqual(health["document_archive"]["refused_documents"], 1)
+
+    def test_resolved_document_is_counted_but_needs_no_action(self):
+        health = self.health(
+            self.report(
+                self.entry(monday_status="uploaded", action_required="none")
+            )
+        )
+
+        archive = health["document_archive"]
+        self.assertEqual(health["status"], "healthy")
+        self.assertEqual(archive["entry_count"], 1)
+        self.assertEqual(archive["unresolved_count"], 0)
+
+    def test_report_of_another_tenant_is_rejected(self):
+        with self.assertRaisesRegex(AutomationCatalogError, "another tenant"):
+            self.health(self.report(self.entry(tenant_id="tenant-other-001")))
+
+    def test_malformed_archive_report_is_rejected(self):
+        with self.assertRaises(AutomationCatalogError):
+            self.health({"entries": "not-a-list"})
+        with self.assertRaises(AutomationCatalogError):
+            self.health(self.report(self.entry(refused_attempts=-1)))
