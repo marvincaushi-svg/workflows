@@ -13,6 +13,7 @@ from workflowos.document_archive import (
     MeraviqaDocumentArchive,
     MondayArchiveReconciliation,
     SbPdfDocument,
+    archive_pdf_file,
     inspect_document_archive,
     reconcile_archived_monday_upload,
     retry_archived_monday_upload,
@@ -663,6 +664,96 @@ class AuthorizedRetryTests(ArchiveFixtures, unittest.TestCase):
                 inspect_document_archive(directory)["entries"][0]["action_required"],
                 "reconcile_monday_upload",
             )
+
+
+class ArchivePdfFileTests(ArchiveFixtures, unittest.TestCase):
+    def pdf_on_disk(self, directory, name="TAG.pdf", content=PDF):
+        path = Path(directory) / name
+        path.write_bytes(content)
+        return path
+
+    def archive_arguments(self, **changes):
+        values = {
+            "tenant_id": "tenant-test-001",
+            "case_id": "case-001",
+            "case_name": "Example Project",
+            "monday_item_id": "2001",
+            "monday_column_id": "file_tag",
+            "document_type": "tag_grid_connection_application",
+        }
+        values.update(changes)
+        return values
+
+    def test_pdf_is_archived_from_disk_without_publishing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = self.pdf_on_disk(directory)
+            archived = archive_pdf_file(
+                Path(directory) / "archive", source, **self.archive_arguments()
+            )
+
+            self.assertEqual(archived["result"]["status"], "archived")
+            self.assertEqual(archived["result"]["monday_status"], "pending")
+            self.assertFalse(archived["result"]["monday_uploaded"])
+            self.assertEqual(
+                archived["result"]["content_sha256"],
+                hashlib.sha256(PDF).hexdigest(),
+            )
+
+    def test_pdf_is_published_when_a_publisher_is_supplied(self):
+        calls = []
+
+        def publisher(item_id, column_id, filename, content):
+            calls.append((item_id, column_id, filename))
+            return {
+                "item_id": item_id,
+                "column_id": column_id,
+                "content_sha256": hashlib.sha256(content).hexdigest(),
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = self.pdf_on_disk(directory)
+            archived = archive_pdf_file(
+                Path(directory) / "archive",
+                source,
+                publisher=publisher,
+                publisher_tenant_id="tenant-test-001",
+                **self.archive_arguments(),
+            )
+
+            self.assertTrue(archived["result"]["monday_uploaded"])
+            self.assertEqual(calls, [("2001", "file_tag", "TAG.pdf")])
+
+    def test_publisher_of_another_tenant_is_never_used(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            source = self.pdf_on_disk(directory)
+
+            with self.assertRaisesRegex(WorkflowError, "Publisher tenant"):
+                archive_pdf_file(
+                    Path(directory) / "archive",
+                    source,
+                    publisher=lambda *args: calls.append(args),
+                    publisher_tenant_id="tenant-test-999",
+                    **self.archive_arguments(),
+                )
+            self.assertEqual(calls, [])
+
+    def test_missing_file_and_non_pdf_are_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(WorkflowError, "does not exist"):
+                archive_pdf_file(
+                    Path(directory) / "archive",
+                    Path(directory) / "absent.pdf",
+                    **self.archive_arguments(),
+                )
+
+            not_pdf = self.pdf_on_disk(directory, "other.pdf", b"not-a-pdf")
+            with self.assertRaisesRegex(WorkflowError, "must be a PDF"):
+                archive_pdf_file(
+                    Path(directory) / "archive",
+                    not_pdf,
+                    **self.archive_arguments(),
+                )
 
 
 class DocumentArchiveCliTests(ArchiveFixtures, unittest.TestCase):
