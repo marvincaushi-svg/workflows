@@ -103,6 +103,14 @@ class DurableMondayEmailPipeline:
                     },
                 }
 
+            _validate_change_binding(
+                state,
+                change,
+                expected_board_id=self._collector.tenant_binding()[
+                    "expected_board_id"
+                ],
+            )
+
             event = self._collector.collect_file_event(
                 item_id=change.item_id,
                 case_id=change.case_id,
@@ -300,6 +308,27 @@ def inspect_delivery_outbox(state_path: str | Path) -> dict[str, Any]:
             ),
             "entries": entries,
         }
+
+
+def _validate_change_binding(
+    state: dict[str, Any],
+    change: MondayFileChange,
+    *,
+    expected_board_id: str,
+) -> None:
+    """Reject a cross-case event before any Monday API or asset request."""
+
+    if state.get("source") != "monday":
+        raise WorkflowError("Automation state source must be monday")
+    state_board_id = _require_string(state.get("board_id"), "state.board_id")
+    if state_board_id != expected_board_id:
+        raise WorkflowError("Automation state board does not match Monday collector")
+    state_item_id = _require_string(state.get("item_id"), "state.item_id")
+    if change.item_id != state_item_id:
+        raise WorkflowError("Monday change item_id does not match persisted state")
+    state_case_id = _require_string(state.get("case_id"), "state.case_id")
+    if change.case_id != state_case_id:
+        raise WorkflowError("Monday change case_id does not match persisted state")
 
 
 def reconcile_delivery_state(
