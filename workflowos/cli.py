@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
+from pathlib import Path
 from typing import Sequence
 
 from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
@@ -14,12 +17,14 @@ from .control_plane import (
     build_event_execution_plan,
     build_health_report,
     build_schedule_execution_plan,
+    record_execution_outcome,
     resolve_communication_policy,
     validate_automation_catalog,
 )
 from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
 from .document_archive import (
     MondayArchiveReconciliation,
+    archive_pdf_file,
     inspect_document_archive,
     reconcile_archived_monday_upload,
     retry_archived_monday_upload,
@@ -265,6 +270,55 @@ def _build_parser() -> argparse.ArgumentParser:
     retry_parser.add_argument(
         "--content-sha256", required=True, help="SHA-256 of the archived PDF"
     )
+
+    archive_add_parser = subparsers.add_parser(
+        "archive-document",
+        help="Archive one verified PDF, optionally publishing it to Monday",
+    )
+    archive_add_parser.add_argument(
+        "--archive-root", required=True, help="MERAVIQA archive root path"
+    )
+    archive_add_parser.add_argument("--tenant-id", required=True)
+    archive_add_parser.add_argument(
+        "--case-id", required=True, help="Non-sensitive case identifier"
+    )
+    archive_add_parser.add_argument(
+        "--case-name", required=True, help="Project name used as the folder name"
+    )
+    archive_add_parser.add_argument("--monday-item-id", required=True)
+    archive_add_parser.add_argument("--monday-column-id", required=True)
+    archive_add_parser.add_argument("--document-type", required=True)
+    archive_add_parser.add_argument(
+        "--pdf", required=True, help="Path of the PDF to archive"
+    )
+    archive_add_parser.add_argument(
+        "--publish-to-monday",
+        action="store_true",
+        help="Also upload to Monday; requires the upload switch",
+    )
+
+    outcome_parser = subparsers.add_parser(
+        "record-automation-outcome",
+        help="Record the outcome of one planned work item and persist state",
+    )
+    outcome_parser.add_argument(
+        "--catalog", required=True, help="Tenant automation catalog path"
+    )
+    outcome_parser.add_argument(
+        "--state", required=True, help="Runtime state JSON path, read and updated"
+    )
+    outcome_parser.add_argument(
+        "--work-item", required=True, help="JSON path of one planned work item"
+    )
+    outcome_parser.add_argument(
+        "--outcome", required=True, choices=("succeeded", "failed")
+    )
+    outcome_parser.add_argument(
+        "--error-code", help="Required when the outcome is failed"
+    )
+    outcome_parser.add_argument(
+        "--at", required=True, help="ISO-8601 outcome timestamp with timezone"
+    )
     return parser
 
 
@@ -288,6 +342,35 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
 
 def _load_runtime_state(path: str | None) -> dict[str, object] | None:
     return load_document(path) if path else None
+
+
+def _load_runtime_state_if_present(path: str) -> dict[str, object] | None:
+    """Start from an empty state the first time an outcome is recorded."""
+
+    return load_document(path) if Path(path).is_file() else None
+
+
+def _write_runtime_state(path: str, state: dict[str, object]) -> None:
+    """Persist control-plane runtime state atomically, in the shape it is read."""
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(
+        state, ensure_ascii=False, indent=2, sort_keys=True
+    ).encode("utf-8") + b"\n"
+    descriptor, temporary = tempfile.mkstemp(
+        dir=target.parent, prefix=f".{target.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    except BaseException:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+        raise
 
 
 def _archive_report(
@@ -434,6 +517,39 @@ def main(argv: Sequence[str] | None = None) -> int:
                 publisher_tenant_id=uploader.tenant_binding()["tenant_id"],
             )
             result = retried["result"]
+        elif args.command == "archive-document":
+            publisher = None
+            publisher_tenant_id = None
+            if args.publish_to_monday:
+                uploader = MondayGuardedUploader(
+                    MondayUploadConfig.from_environment()
+                )
+                publisher = uploader.publisher()
+                publisher_tenant_id = uploader.tenant_binding()["tenant_id"]
+            archived = archive_pdf_file(
+                args.archive_root,
+                args.pdf,
+                tenant_id=args.tenant_id,
+                case_id=args.case_id,
+                case_name=args.case_name,
+                monday_item_id=args.monday_item_id,
+                monday_column_id=args.monday_column_id,
+                document_type=args.document_type,
+                publisher=publisher,
+                publisher_tenant_id=publisher_tenant_id,
+            )
+            result = archived["result"]
+        elif args.command == "record-automation-outcome":
+            recorded = record_execution_outcome(
+                load_document(args.catalog),
+                load_document(args.work_item),
+                state=_load_runtime_state_if_present(args.state),
+                succeeded=args.outcome == "succeeded",
+                at=args.at,
+                error_code=args.error_code,
+            )
+            _write_runtime_state(args.state, recorded["state"])
+            result = recorded["result"]
         else:
             parser.error(f"Unsupported command: {args.command}")
             return 2

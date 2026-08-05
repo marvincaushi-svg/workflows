@@ -439,6 +439,66 @@ def retry_archived_monday_upload(
     }
 
 
+def archive_pdf_file(
+    root: str | Path,
+    pdf_path: str | Path,
+    *,
+    tenant_id: str,
+    case_id: str,
+    case_name: str,
+    monday_item_id: str,
+    monday_column_id: str,
+    document_type: str,
+    publisher: MondayPdfPublisher | None = None,
+    publisher_tenant_id: str | None = None,
+    max_pdf_bytes: int = MAX_ARCHIVE_PDF_BYTES,
+) -> dict[str, Any]:
+    """Archive one PDF read from disk, optionally publishing it to Monday.
+
+    Without a publisher the PDF is stored and left pending, so archiving can be
+    exercised without arming any external write.
+    """
+
+    if publisher is not None:
+        if _require_string(
+            publisher_tenant_id, "archive.publisher_tenant_id"
+        ) != tenant_id:
+            raise WorkflowError("Publisher tenant does not match the archived document")
+    source = Path(pdf_path)
+    if not source.is_file():
+        raise WorkflowError("PDF to archive does not exist")
+    content = source.read_bytes()
+    document = SbPdfDocument(
+        tenant_id=tenant_id,
+        case_id=case_id,
+        case_name=case_name,
+        monday_item_id=monday_item_id,
+        monday_column_id=monday_column_id,
+        document_type=document_type,
+        filename=source.name,
+        content=content,
+        content_sha256=hashlib.sha256(content).hexdigest(),
+    )
+    archive = MeraviqaDocumentArchive(
+        root, monday_publisher=publisher, max_pdf_bytes=max_pdf_bytes
+    )
+    archived = archive.archive(document)
+    return {
+        "archive": archived,
+        "result": {
+            "status": archived["status"],
+            "tenant_id": archived["tenant_id"],
+            "case_id": archived["case_id"],
+            "content_sha256": archived["content_sha256"],
+            "document_type": document_type,
+            "monday_status": archived["monday_status"],
+            "upload_attempts": archived["upload_attempts"],
+            "refused_attempts": archived["refused_attempts"],
+            "monday_uploaded": archived["monday_status"] == "uploaded",
+        },
+    }
+
+
 def _retry_status(monday_status: str) -> str:
     if monday_status == "uploaded":
         return "uploaded"

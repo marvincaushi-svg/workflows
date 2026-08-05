@@ -142,6 +142,14 @@ La fixture pubblica deriva da una vera email operativa, ma è sanificata: identi
 
 I documenti originali non sono pubblicati. La fixture registra soltanto classificazioni sanificate basate sulla verifica del contenuto. I test dimostrano sia il passaggio `blocked → ready`, sia il blocco esplicito quando firma o contenuto non sono verificati.
 
+## Test reale
+
+Per portare il motore su sistemi veri, `RUNBOOK.md` descrive il percorso in fasi
+separate: verifica locale, percorso documentale a secco, Monday in sola lettura,
+primo caricamento reale, riconciliazione, email e regia quotidiana. Le prime tre
+fasi non scrivono nulla e non richiedono credenziali; nessuna fase arma la
+successiva.
+
 ## Esecuzione
 
 Richiede Python 3.11 o successivo e non ha dipendenze runtime esterne.
@@ -218,6 +226,7 @@ Nuovi agenti, provider, adapter o moduli restano fuori dal MVP finché questo pe
 - `workflowos/`: motore deterministico e audit log.
 - `tests/`: test automatici unitari ed end-to-end.
 - `.github/workflows/test.yml`: verifica continua su GitHub.
+- `RUNBOOK.md`: percorso a fasi per il collaudo su sistemi reali.
 - `workflowos/technical_review.py`: decisione tecnica `approved`, `changes_required` o `rejected`, sempre soggetta alla firma del professionista autorizzato.
 
 ## Privacy
