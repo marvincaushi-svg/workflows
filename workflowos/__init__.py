@@ -13,6 +13,7 @@ from .control_plane import (
     validate_automation_catalog,
 )
 from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
+from .document_archive import MeraviqaDocumentArchive, SbPdfDocument
 from .hostpoint_email import (
     EmailAttachment,
     HostpointSmtpConfig,
@@ -57,11 +58,13 @@ __all__ = [
     "initialize_automation_state",
     "MondayReadOnlyCollector",
     "MondayReadOnlyConfig",
+    "MeraviqaDocumentArchive",
     "DurableMondayEmailPipeline",
     "DeliveryReconciliation",
     "MondayFileChange",
     "inspect_delivery_outbox",
     "reconcile_delivery_state",
+    "SbPdfDocument",
     "load_document",
     "normalize_runtime_state",
     "read_audit_log",
