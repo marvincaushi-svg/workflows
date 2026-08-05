@@ -384,6 +384,70 @@ def reconcile_archived_monday_upload(
     }
 
 
+def retry_archived_monday_upload(
+    root: str | Path,
+    tenant_id: str,
+    case_id: str,
+    content_sha256: str,
+    *,
+    publisher: MondayPdfPublisher,
+    publisher_tenant_id: str,
+    max_pdf_bytes: int = MAX_ARCHIVE_PDF_BYTES,
+) -> dict[str, Any]:
+    """Perform the single authorized retry for one archived PDF.
+
+    The retry stays available only after evidence confirmed the PDF was not
+    uploaded.  The document binding is rebuilt from the manifest, so the caller
+    cannot aim the retry at another Monday item, and the publisher must be
+    bound to the same tenant as the archived document.
+    """
+
+    root_path = Path(root)
+    normalized_tenant_id = _require_string(tenant_id, "retry.tenant_id")
+    if not TENANT_ID_RE.fullmatch(normalized_tenant_id):
+        raise WorkflowError("Archive tenant id is invalid")
+    if _require_string(publisher_tenant_id, "retry.publisher_tenant_id") != (
+        normalized_tenant_id
+    ):
+        raise WorkflowError("Publisher tenant does not match the archived document")
+    normalized_case_id = _require_string(case_id, "retry.case_id")
+    if not SHA256_RE.fullmatch(content_sha256):
+        raise WorkflowError("Archive content checksum must be SHA-256")
+
+    case_directory = _find_case_directory(
+        root_path, normalized_tenant_id, normalized_case_id
+    )
+    manifest = _parse_manifest(case_directory / MANIFEST_FILENAME)
+    document = _rebuild_archived_document(case_directory, manifest, content_sha256)
+    archive = MeraviqaDocumentArchive(
+        root_path, monday_publisher=publisher, max_pdf_bytes=max_pdf_bytes
+    )
+    retried = archive.retry_authorized_monday(document)
+    return {
+        "archive": retried,
+        "result": {
+            "status": _retry_status(retried["monday_status"]),
+            "tenant_id": retried["tenant_id"],
+            "case_id": retried["case_id"],
+            "content_sha256": retried["content_sha256"],
+            "document_type": document.document_type,
+            "monday_status": retried["monday_status"],
+            "upload_attempts": retried["upload_attempts"],
+            "refused_attempts": retried["refused_attempts"],
+            "monday_uploaded": retried["monday_status"] == "uploaded",
+        },
+    }
+
+
+def _retry_status(monday_status: str) -> str:
+    if monday_status == "uploaded":
+        return "uploaded"
+    if monday_status == "retry_authorized":
+        # A refusal before transmission keeps the authorization available.
+        return "retry_refused"
+    return monday_status
+
+
 def _archive_tenant_directories(
     root: Path, tenant_id: str | None
 ) -> list[Path]:
