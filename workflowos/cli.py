@@ -14,6 +14,11 @@ from .hostpoint_email import (
     check_hostpoint_connection,
     send_hostpoint_self_test,
 )
+from .monday_pipeline import (
+    DeliveryReconciliation,
+    inspect_delivery_outbox,
+    reconcile_delivery_state,
+)
 from .technical_review import create_remediation_plan, evaluate_technical_review
 
 
@@ -58,6 +63,39 @@ def _build_parser() -> argparse.ArgumentParser:
         "send-hostpoint-self-test",
         help="Send one fixed test email from and to the A&F mailbox",
     )
+    outbox_parser = subparsers.add_parser(
+        "inspect-email-outbox",
+        help="Inspect delivery state without showing email contents",
+    )
+    outbox_parser.add_argument(
+        "--state", required=True, help="Automation state path"
+    )
+
+    reconcile_parser = subparsers.add_parser(
+        "reconcile-email-delivery",
+        help="Record verified evidence for an uncertain email delivery",
+    )
+    reconcile_parser.add_argument(
+        "--state", required=True, help="Automation state path"
+    )
+    reconcile_parser.add_argument("--idempotency-key", required=True)
+    reconcile_parser.add_argument(
+        "--outcome",
+        required=True,
+        choices=("confirmed-sent", "confirmed-not-sent"),
+    )
+    reconcile_parser.add_argument(
+        "--checked-at",
+        required=True,
+        help="ISO-8601 evidence timestamp with timezone",
+    )
+    reconcile_parser.add_argument(
+        "--checked-by-ref",
+        required=True,
+        help="Non-sensitive operator or procedure reference",
+    )
+    reconcile_parser.add_argument("--evidence-ref-sha256", required=True)
+    reconcile_parser.add_argument("--message-ref-sha256")
     return parser
 
 
@@ -95,6 +133,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "send-hostpoint-self-test":
             config = HostpointSmtpConfig.from_environment()
             result = send_hostpoint_self_test(config)
+        elif args.command == "inspect-email-outbox":
+            result = inspect_delivery_outbox(args.state)
+        elif args.command == "reconcile-email-delivery":
+            reconciled = reconcile_delivery_state(
+                args.state,
+                DeliveryReconciliation(
+                    idempotency_key=args.idempotency_key,
+                    outcome=args.outcome.replace("-", "_"),
+                    checked_at=args.checked_at,
+                    checked_by_ref=args.checked_by_ref,
+                    evidence_ref_sha256=args.evidence_ref_sha256,
+                    message_ref_sha256=args.message_ref_sha256,
+                ),
+            )
+            result = reconciled["result"]
         else:
             review = load_document(args.review)
             decision = evaluate_technical_review(review)
