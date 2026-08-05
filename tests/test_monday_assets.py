@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import unittest
+import urllib.request
 
 from workflowos.core import WorkflowError
 from workflowos.monday_assets import (
@@ -11,6 +12,7 @@ from workflowos.monday_assets import (
     DownloadedAsset,
     MondayReadOnlyCollector,
     MondayReadOnlyConfig,
+    _ApprovedAssetRedirectHandler,
 )
 
 
@@ -158,6 +160,46 @@ class MondayReadOnlyCollectorTests(unittest.TestCase):
                 item_id=ITEM_ID, case_id="case-1", column_id=COLUMN_ID
             )
         self.assertEqual(self.download_calls, [])
+
+    def test_unapproved_redirect_is_rejected_before_following(self):
+        collector = self.collector()
+        handler = _ApprovedAssetRedirectHandler(collector._validate_asset_url)
+        request = urllib.request.Request(PUBLIC_URL)
+        blocked_targets = (
+            "https://example.com/redirected.pdf",
+            PUBLIC_URL.replace("https://", "http://"),
+            PUBLIC_URL.replace(".com/", ".com:444/"),
+        )
+
+        for target in blocked_targets:
+            with self.subTest(target=target):
+                with self.assertRaisesRegex(WorkflowError, "host is not approved"):
+                    handler.redirect_request(
+                        request,
+                        None,
+                        302,
+                        "Found",
+                        {},
+                        target,
+                    )
+
+    def test_approved_https_redirect_remains_available(self):
+        collector = self.collector()
+        handler = _ApprovedAssetRedirectHandler(collector._validate_asset_url)
+        request = urllib.request.Request(PUBLIC_URL)
+        approved_url = PUBLIC_URL.replace("TAG.pdf", "TAG-updated.pdf")
+
+        redirected = handler.redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            approved_url,
+        )
+
+        self.assertIsNotNone(redirected)
+        self.assertEqual(redirected.full_url, approved_url)
 
     def test_non_pdf_content_is_rejected(self):
         self.content = b"not-a-pdf-but-same-size-xxxxx"[: len(PDF)]
