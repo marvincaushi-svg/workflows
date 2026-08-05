@@ -15,6 +15,7 @@ from workflowos.document_archive import (
     SbPdfDocument,
     inspect_document_archive,
     reconcile_archived_monday_upload,
+    retry_archived_monday_upload,
 )
 
 
@@ -515,6 +516,153 @@ class DocumentArchiveInspectionTests(ArchiveFixtures, unittest.TestCase):
                 reconcile_archived_monday_upload(
                     directory, self.evidence(document, "confirmed_not_uploaded")
                 )
+
+
+class AuthorizedRetryTests(ArchiveFixtures, unittest.TestCase):
+    def authorized_archive(self, directory, document):
+        """Bring one archived PDF to the retry_authorized state."""
+
+        def uncertain(*args):
+            raise OSError("connection lost after upload")
+
+        archive = MeraviqaDocumentArchive(directory, monday_publisher=uncertain)
+        archive.archive(document)
+        archive.reconcile_monday(
+            document, self.evidence(document, "confirmed_not_uploaded")
+        )
+
+    def accepting_publisher(self, calls):
+        def publisher(item_id, column_id, filename, content):
+            calls.append((item_id, column_id, filename))
+            return {
+                "item_id": item_id,
+                "column_id": column_id,
+                "content_sha256": hashlib.sha256(content).hexdigest(),
+            }
+
+        return publisher
+
+    def test_authorized_retry_uploads_the_archived_pdf(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            self.authorized_archive(directory, document)
+
+            retried = retry_archived_monday_upload(
+                directory,
+                document.tenant_id,
+                document.case_id,
+                document.content_sha256,
+                publisher=self.accepting_publisher(calls),
+                publisher_tenant_id=document.tenant_id,
+            )
+
+            self.assertEqual(retried["result"]["status"], "uploaded")
+            self.assertTrue(retried["result"]["monday_uploaded"])
+            self.assertEqual(calls, [("2001", "file_tag", "TAG.pdf")])
+            self.assertEqual(
+                inspect_document_archive(directory)["unresolved_count"], 0
+            )
+
+    def test_retry_is_available_only_once(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            self.authorized_archive(directory, document)
+            retry = lambda: retry_archived_monday_upload(
+                directory,
+                document.tenant_id,
+                document.case_id,
+                document.content_sha256,
+                publisher=self.accepting_publisher(calls),
+                publisher_tenant_id=document.tenant_id,
+            )
+            retry()
+
+            with self.assertRaisesRegex(WorkflowError, "not been authorized"):
+                retry()
+            self.assertEqual(len(calls), 1)
+
+    def test_retry_without_authorization_is_refused(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            MeraviqaDocumentArchive(directory).archive(document)
+
+            with self.assertRaisesRegex(WorkflowError, "not been authorized"):
+                retry_archived_monday_upload(
+                    directory,
+                    document.tenant_id,
+                    document.case_id,
+                    document.content_sha256,
+                    publisher=self.accepting_publisher(calls),
+                    publisher_tenant_id=document.tenant_id,
+                )
+            self.assertEqual(calls, [])
+
+    def test_publisher_of_another_tenant_is_never_used(self):
+        calls = []
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            self.authorized_archive(directory, document)
+
+            with self.assertRaisesRegex(WorkflowError, "Publisher tenant"):
+                retry_archived_monday_upload(
+                    directory,
+                    document.tenant_id,
+                    document.case_id,
+                    document.content_sha256,
+                    publisher=self.accepting_publisher(calls),
+                    publisher_tenant_id="tenant-test-999",
+                )
+            self.assertEqual(calls, [])
+
+    def test_refused_retry_keeps_the_authorization(self):
+        def refusing(*args):
+            raise PublicationRefused("column is not configured")
+
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            self.authorized_archive(directory, document)
+
+            refused = retry_archived_monday_upload(
+                directory,
+                document.tenant_id,
+                document.case_id,
+                document.content_sha256,
+                publisher=refusing,
+                publisher_tenant_id=document.tenant_id,
+            )
+
+            self.assertEqual(refused["result"]["status"], "retry_refused")
+            self.assertFalse(refused["result"]["monday_uploaded"])
+            self.assertEqual(
+                inspect_document_archive(directory)["entries"][0]["action_required"],
+                "retry_monday_upload",
+            )
+
+    def test_uncertain_retry_requires_reconciliation_again(self):
+        def uncertain(*args):
+            raise OSError("connection lost again")
+
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            self.authorized_archive(directory, document)
+
+            retried = retry_archived_monday_upload(
+                directory,
+                document.tenant_id,
+                document.case_id,
+                document.content_sha256,
+                publisher=uncertain,
+                publisher_tenant_id=document.tenant_id,
+            )
+
+            self.assertEqual(retried["result"]["status"], "upload_in_doubt")
+            self.assertEqual(
+                inspect_document_archive(directory)["entries"][0]["action_required"],
+                "reconcile_monday_upload",
+            )
 
 
 class DocumentArchiveCliTests(ArchiveFixtures, unittest.TestCase):

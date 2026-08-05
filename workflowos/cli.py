@@ -21,6 +21,7 @@ from .document_archive import (
     MondayArchiveReconciliation,
     inspect_document_archive,
     reconcile_archived_monday_upload,
+    retry_archived_monday_upload,
 )
 from .hostpoint_email import (
     HostpointSmtpConfig,
@@ -225,6 +226,21 @@ def _build_parser() -> argparse.ArgumentParser:
     upload_check_parser.add_argument(
         "--item-id", required=True, help="Monday item id to verify"
     )
+
+    retry_parser = subparsers.add_parser(
+        "retry-monday-upload",
+        help="Perform the single authorized retry for an archived PDF",
+    )
+    retry_parser.add_argument(
+        "--archive-root", required=True, help="MERAVIQA archive root path"
+    )
+    retry_parser.add_argument("--tenant-id", required=True)
+    retry_parser.add_argument(
+        "--case-id", required=True, help="Non-sensitive case identifier"
+    )
+    retry_parser.add_argument(
+        "--content-sha256", required=True, help="SHA-256 of the archived PDF"
+    )
     return parser
 
 
@@ -352,6 +368,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "check-monday-upload":
             config = MondayUploadConfig.from_environment(require_live_enabled=False)
             result = MondayGuardedUploader(config).verify_binding(args.item_id)
+        elif args.command == "retry-monday-upload":
+            uploader = MondayGuardedUploader(MondayUploadConfig.from_environment())
+            retried = retry_archived_monday_upload(
+                args.archive_root,
+                args.tenant_id,
+                args.case_id,
+                args.content_sha256,
+                publisher=uploader.publisher(),
+                publisher_tenant_id=uploader.tenant_binding()["tenant_id"],
+            )
+            result = retried["result"]
         else:
             parser.error(f"Unsupported command: {args.command}")
             return 2

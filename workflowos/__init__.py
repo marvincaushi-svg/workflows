@@ -25,6 +25,7 @@ from .document_archive import (
     SbPdfDocument,
     inspect_document_archive,
     reconcile_archived_monday_upload,
+    retry_archived_monday_upload,
 )
 from .hostpoint_email import (
     EmailAttachment,
@@ -82,6 +83,7 @@ __all__ = [
     "inspect_delivery_outbox",
     "inspect_document_archive",
     "reconcile_archived_monday_upload",
+    "retry_archived_monday_upload",
     "reconcile_delivery_state",
     "SbPdfDocument",
     "load_document",
