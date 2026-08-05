@@ -106,6 +106,17 @@ python -m workflowos.cli automation-health \
   --at 2026-08-04T07:00:00+02:00
 ```
 
+Con `--archive-root` il rapporto include anche i documenti fermi, ispezionando soltanto l'archivio del tenant del catalogo:
+
+```bash
+python -m workflowos.cli automation-health \
+  --catalog examples/tenants/electrical-contractor/automation.catalog.sanitized.json \
+  --at 2026-08-04T07:00:00+02:00 \
+  --archive-root /percorso/archivio
+```
+
+I documenti vengono raggruppati per azione richiesta. Un PDF in attesa di riconciliazione o del ritentativo autorizzato richiede una persona e porta il rapporto ad `attention_required`; un PDF semplicemente in attesa di pubblicazione no, a meno che una pubblicazione sia già stata respinta, perché un rifiuto che si ripete è un errore di configurazione e non una coda. Il rapporto indica commessa, tipo di documento e hash, mai cartelle o nomi di file.
+
 Ispezionare l'archivio documentale senza contattare Monday:
 
 ```bash

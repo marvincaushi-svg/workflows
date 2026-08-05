@@ -842,8 +842,14 @@ def build_health_report(
     *,
     state: dict[str, Any] | None,
     at: str,
+    archive_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Summarize enabled automations, due retries, and dead letters."""
+    """Summarize enabled automations, due retries, dead letters and documents.
+
+    The archive backlog is supplied already computed, so the control plane keeps
+    orchestration rules separate from storage and provider code.  Every entry
+    must belong to the catalog tenant, otherwise the report is rejected.
+    """
 
     catalog = validate_automation_catalog(catalog_document)
     runtime = normalize_runtime_state(state)
@@ -864,16 +870,105 @@ def build_health_report(
         if value.get("tenant_id") == tenant_id
     ]
     enabled = sum(1 for item in catalog["automations"] if item["enabled"])
+    documents = _summarize_document_archive(archive_report, tenant_id)
+    needs_attention = bool(dead_letters) or documents["attention_required"]
     return {
         "tenant_id": tenant_id,
         "organization_name": catalog["tenant"]["organization_name"],
         "generated_at": instant.isoformat(),
         "timezone": catalog["timezone"],
-        "status": "attention_required" if dead_letters else "healthy",
+        "status": "attention_required" if needs_attention else "healthy",
         "enabled_automations": enabled,
         "disabled_automations": len(catalog["automations"]) - enabled,
         "due_retries": sorted(due_retries, key=lambda item: item["retry_at"]),
         "dead_letters": sorted(
             dead_letters, key=lambda item: item["failed_at"]
         ),
+        "document_archive": documents,
     }
+
+
+ARCHIVE_ATTENTION_ACTIONS = {"reconcile_monday_upload", "retry_monday_upload"}
+
+
+def _summarize_document_archive(
+    archive_report: dict[str, Any] | None, tenant_id: str
+) -> dict[str, Any]:
+    """Group archived PDFs by the operator action each one still needs.
+
+    A document waiting for reconciliation or for its authorized retry needs a
+    person, so it raises the report to attention_required.  A document merely
+    waiting to be published does not, unless a publication was already refused:
+    a refusal that repeats is a configuration fault, not a queue.
+    """
+
+    summary: dict[str, Any] = {
+        "configured": archive_report is not None,
+        "entry_count": 0,
+        "unresolved_count": 0,
+        "awaiting_reconciliation": [],
+        "awaiting_retry": [],
+        "awaiting_publication": [],
+        "refused_documents": 0,
+        "attention_required": False,
+    }
+    if archive_report is None:
+        return summary
+
+    report = _require_mapping(archive_report, "archive_report")
+    entries = _require_list(report.get("entries", []), "archive_report.entries")
+    grouped = {
+        "reconcile_monday_upload": summary["awaiting_reconciliation"],
+        "retry_monday_upload": summary["awaiting_retry"],
+        "publish_monday_upload": summary["awaiting_publication"],
+    }
+    for position, raw_entry in enumerate(entries):
+        entry = _require_mapping(raw_entry, f"archive_report.entries.{position}")
+        if _require_string(
+            entry.get("tenant_id"), f"archive_report.entries.{position}.tenant_id"
+        ) != tenant_id:
+            raise AutomationCatalogError(
+                "Document archive report belongs to another tenant"
+            )
+        action = _require_string(
+            entry.get("action_required"),
+            f"archive_report.entries.{position}.action_required",
+        )
+        refused = entry.get("refused_attempts", 0)
+        if not isinstance(refused, int) or isinstance(refused, bool) or refused < 0:
+            raise AutomationCatalogError("Document archive refusals are invalid")
+        if refused:
+            summary["refused_documents"] += 1
+        bucket = grouped.get(action)
+        if bucket is not None:
+            bucket.append(
+                {
+                    "case_id": _require_string(
+                        entry.get("case_id"),
+                        f"archive_report.entries.{position}.case_id",
+                    ),
+                    "content_sha256": _require_string(
+                        entry.get("content_sha256"),
+                        f"archive_report.entries.{position}.content_sha256",
+                    ),
+                    "document_type": _require_string(
+                        entry.get("document_type"),
+                        f"archive_report.entries.{position}.document_type",
+                    ),
+                    "action_required": action,
+                }
+            )
+        if action in ARCHIVE_ATTENTION_ACTIONS:
+            summary["attention_required"] = True
+
+    summary["entry_count"] = len(entries)
+    summary["unresolved_count"] = (
+        len(summary["awaiting_reconciliation"])
+        + len(summary["awaiting_retry"])
+        + len(summary["awaiting_publication"])
+    )
+    if summary["refused_documents"]:
+        summary["attention_required"] = True
+    for bucket in grouped.values():
+        bucket.sort(key=lambda item: (item["case_id"], item["content_sha256"]))
+    return summary

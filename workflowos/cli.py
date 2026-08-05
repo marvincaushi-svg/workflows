@@ -123,6 +123,10 @@ def _build_parser() -> argparse.ArgumentParser:
     health_parser.add_argument(
         "--at", required=True, help="ISO-8601 report timestamp with timezone"
     )
+    health_parser.add_argument(
+        "--archive-root",
+        help="Optional MERAVIQA archive root to include the document backlog",
+    )
 
     language_parser = subparsers.add_parser(
         "resolve-message-language",
@@ -266,6 +270,19 @@ def _load_runtime_state(path: str | None) -> dict[str, object] | None:
     return load_document(path) if path else None
 
 
+def _archive_report(
+    archive_root: str | None, catalog_document: dict[str, object]
+) -> dict[str, object] | None:
+    """Inspect the archive of the catalog tenant only, when a root is given."""
+
+    if not archive_root:
+        return None
+    catalog = validate_automation_catalog(catalog_document)
+    return inspect_document_archive(
+        archive_root, tenant_id=catalog["tenant"]["id"]
+    )
+
+
 def _catalog_summary(catalog_path: str) -> dict[str, object]:
     catalog = validate_automation_catalog(load_document(catalog_path))
     enabled = sum(1 for item in catalog["automations"] if item["enabled"])
@@ -315,10 +332,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 at=args.at,
             )
         elif args.command == "automation-health":
+            catalog_document = load_document(args.catalog)
             result = build_health_report(
-                load_document(args.catalog),
+                catalog_document,
                 state=_load_runtime_state(args.state),
                 at=args.at,
+                archive_report=_archive_report(
+                    args.archive_root, catalog_document
+                ),
             )
         elif args.command == "resolve-message-language":
             result = resolve_communication_policy(
