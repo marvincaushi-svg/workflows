@@ -888,6 +888,115 @@ def build_health_report(
     }
 
 
+def build_daily_operations_brief(
+    catalog_document: dict[str, Any],
+    *,
+    state: dict[str, Any] | None,
+    at: str,
+    events: list[dict[str, Any]] | None = None,
+    archive_report: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compose the morning brief of ready, blocked, retrying and failed work.
+
+    The brief only observes.  It reuses the existing planners and the health
+    report instead of restating their rules, so what the brief shows and what
+    the control plane would actually execute cannot drift apart.  Nothing is
+    written and no external system is contacted.
+    """
+
+    catalog = validate_automation_catalog(catalog_document)
+    tenant = catalog["tenant"]
+    schedule = build_schedule_execution_plan(catalog_document, state=state, at=at)
+    health = build_health_report(
+        catalog_document, state=state, at=at, archive_report=archive_report
+    )
+    plan = (
+        build_event_execution_plan(
+            catalog_document, events, state=state, at=at
+        )
+        if events
+        else {"ready": [], "blocked": []}
+    )
+
+    ready = [_brief_event_work(item) for item in plan["ready"]]
+    ready.extend(_brief_schedule_work(item) for item in schedule["ready"])
+    ready.sort(key=lambda item: (-item["priority"], item["automation_id"]))
+    blocked = [
+        {
+            **_brief_event_work(item),
+            "missing_dependencies": list(item["missing_dependencies"]),
+        }
+        for item in plan["blocked"]
+    ]
+    documents = health["document_archive"]
+    return {
+        "tenant_id": tenant["id"],
+        "organization_name": tenant["organization_name"],
+        "generated_at": health["generated_at"],
+        "local_time": schedule["local_time"],
+        "timezone": catalog["timezone"],
+        "status": health["status"],
+        "totals": {
+            "ready": len(ready),
+            "blocked": len(blocked),
+            "retrying": len(health["due_retries"]),
+            "failed": len(health["dead_letters"]),
+            "documents_awaiting_action": (
+                len(documents["awaiting_reconciliation"])
+                + len(documents["awaiting_retry"])
+            ),
+        },
+        "ready": ready,
+        "blocked": blocked,
+        "retrying": [_brief_retry(item) for item in health["due_retries"]],
+        "failed": [_brief_dead_letter(item) for item in health["dead_letters"]],
+        "documents": copy.deepcopy(documents),
+    }
+
+
+def _brief_work(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "automation_id": item["automation_id"],
+        "owner_role": item["owner_role"],
+        "priority": item["priority"],
+        "objective": item["objective"],
+        "output": item["output"],
+        "action_mode": item["action"]["mode"],
+    }
+
+
+def _brief_event_work(item: dict[str, Any]) -> dict[str, Any]:
+    return {**_brief_work(item), "source": "event", "case_id": item["case_id"]}
+
+
+def _brief_schedule_work(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **_brief_work(item),
+        "source": "schedule",
+        "schedule_slot": item["schedule_slot"],
+    }
+
+
+def _brief_retry(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "key": item["key"],
+        "automation_id": item.get("automation_id"),
+        "case_id": item.get("case_id"),
+        "retry_at": item.get("retry_at"),
+        "attempts": item.get("attempts"),
+    }
+
+
+def _brief_dead_letter(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "key": item["key"],
+        "automation_id": item.get("automation_id"),
+        "case_id": item.get("case_id"),
+        "error_code": item.get("error_code"),
+        "failed_at": item.get("failed_at"),
+    }
+
+
 ARCHIVE_ATTENTION_ACTIONS = {"reconcile_monday_upload", "retry_monday_upload"}
 
 

@@ -192,6 +192,7 @@ I test coprono:
 - distinzione fra mancata trasmissione certa ed esito ignoto: la prima conserva lo stato e non consuma un ritentativo autorizzato, la seconda continua a richiedere riconciliazione con prova.
 - ritentativo autorizzato eseguibile una sola volta, vincolato al legame documentale del manifest e al tenant del publisher.
 - arretrato documentale incluso nel rapporto salute, isolato per tenant e raggruppato per azione richiesta.
+- brief operativo del mattino composto dai pianificatori esistenti, osservativo e senza mutazione dello stato.
 
 ## Confini delle responsabilità
 

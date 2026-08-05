@@ -10,6 +10,7 @@ from typing import Sequence
 from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
 from .control_plane import (
     AutomationCatalogError,
+    build_daily_operations_brief,
     build_event_execution_plan,
     build_health_report,
     build_schedule_execution_plan,
@@ -126,6 +127,25 @@ def _build_parser() -> argparse.ArgumentParser:
     health_parser.add_argument(
         "--archive-root",
         help="Optional MERAVIQA archive root to include the document backlog",
+    )
+
+    brief_parser = subparsers.add_parser(
+        "daily-operations-brief",
+        help="Compose the morning brief of ready, blocked, retrying and failed work",
+    )
+    brief_parser.add_argument(
+        "--catalog", required=True, help="Tenant automation catalog path"
+    )
+    brief_parser.add_argument("--state", help="Optional runtime state JSON path")
+    brief_parser.add_argument(
+        "--events", help="Optional JSON document containing an events list"
+    )
+    brief_parser.add_argument(
+        "--archive-root",
+        help="Optional MERAVIQA archive root to include the document backlog",
+    )
+    brief_parser.add_argument(
+        "--at", required=True, help="ISO-8601 brief timestamp with timezone"
     )
 
     language_parser = subparsers.add_parser(
@@ -337,6 +357,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 catalog_document,
                 state=_load_runtime_state(args.state),
                 at=args.at,
+                archive_report=_archive_report(
+                    args.archive_root, catalog_document
+                ),
+            )
+        elif args.command == "daily-operations-brief":
+            catalog_document = load_document(args.catalog)
+            events_document = (
+                load_document(args.events) if args.events else {}
+            )
+            result = build_daily_operations_brief(
+                catalog_document,
+                state=_load_runtime_state(args.state),
+                at=args.at,
+                events=events_document.get("events", []),
                 archive_report=_archive_report(
                     args.archive_root, catalog_document
                 ),

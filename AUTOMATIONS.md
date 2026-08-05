@@ -138,6 +138,20 @@ python -m workflowos.cli reconcile-monday-upload \
   --evidence-ref-sha256 HASH_SHA256_PROVA
 ```
 
+Comporre il brief operativo del mattino:
+
+```bash
+python -m workflowos.cli daily-operations-brief \
+  --catalog examples/tenants/electrical-contractor/automation.catalog.sanitized.json \
+  --events examples/automation/events.sanitized.json \
+  --archive-root /percorso/archivio \
+  --at 2026-08-04T07:00:00+02:00
+```
+
+Il brief risponde a una sola domanda: cosa richiede attenzione oggi. Raggruppa il lavoro pronto (da eventi e da pianificazione), quello bloccato con le dipendenze mancanti, i ritentativi dovuti, i fallimenti in dead letter e i documenti fermi. `--events` e `--archive-root` sono facoltativi: senza il primo il brief riporta solo il lavoro pianificato, senza il secondo omette l'arretrato documentale.
+
+Il brief non ricalcola le regole: riusa il pianificatore degli eventi, quello degli orari e il rapporto salute, così ciò che mostra e ciò che il control plane eseguirebbe non possono divergere. È puramente osservativo — non scrive stato e non contatta alcun sistema esterno. Lo stato del brief coincide con quello del rapporto salute: un fallimento in dead letter o un documento che richiede una persona lo portano ad `attention_required`; una dipendenza non ancora soddisfatta no, perché è il normale ordine dei flussi.
+
 Verificare il binding di scrittura Monday senza caricare alcun file:
 
 ```bash

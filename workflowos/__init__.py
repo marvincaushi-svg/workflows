@@ -4,6 +4,7 @@ from .automation import handle_monday_file_event, initialize_automation_state
 from .audit import build_audit_log, read_audit_log, verify_audit_log, write_audit_log
 from .control_plane import (
     AutomationCatalogError,
+    build_daily_operations_brief,
     build_event_execution_plan,
     build_health_report,
     build_schedule_execution_plan,
@@ -59,6 +60,7 @@ __all__ = [
     "WorkflowError",
     "build_audit_log",
     "build_case_from_email",
+    "build_daily_operations_brief",
     "build_event_execution_plan",
     "build_health_report",
     "build_schedule_execution_plan",
