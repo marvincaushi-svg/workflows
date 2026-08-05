@@ -265,6 +265,70 @@ class DurableMondayEmailPipelineTests(unittest.TestCase):
             DurableMondayEmailPipeline(self.collector, config)
         self.assertEqual(self.graphql_calls, [])
 
+    def test_wrong_item_is_rejected_before_monday_access(self):
+        before = self.state_path.read_bytes()
+
+        with self.assertRaisesRegex(WorkflowError, "item_id does not match"):
+            self.pipeline.process(
+                self.state_path,
+                MondayFileChange(
+                    item_id="3059999999",
+                    case_id="pilot-pv-001",
+                    column_id="file_tag",
+                ),
+                self.verification("file_tag"),
+            )
+
+        self.assertEqual(self.graphql_calls, [])
+        self.assertEqual(self.download_calls, [])
+        self.assertEqual(self.state_path.read_bytes(), before)
+
+    def test_wrong_case_is_rejected_before_monday_access(self):
+        before = self.state_path.read_bytes()
+
+        with self.assertRaisesRegex(WorkflowError, "case_id does not match"):
+            self.pipeline.process(
+                self.state_path,
+                MondayFileChange(
+                    item_id=ITEM_ID,
+                    case_id="different-case",
+                    column_id="file_tag",
+                ),
+                self.verification("file_tag"),
+            )
+
+        self.assertEqual(self.graphql_calls, [])
+        self.assertEqual(self.download_calls, [])
+        self.assertEqual(self.state_path.read_bytes(), before)
+
+    def test_wrong_state_source_or_board_is_rejected_before_monday_access(self):
+        invalid_values = (
+            ("source", "other", "source must be monday"),
+            ("board_id", "5099999999", "board does not match"),
+        )
+
+        for field, value, expected_error in invalid_values:
+            with self.subTest(field=field):
+                state = copy.deepcopy(self.initial_state)
+                state[field] = value
+                save_automation_state(self.state_path, state)
+                before = self.state_path.read_bytes()
+
+                with self.assertRaisesRegex(WorkflowError, expected_error):
+                    self.pipeline.process(
+                        self.state_path,
+                        MondayFileChange(
+                            item_id=ITEM_ID,
+                            case_id="pilot-pv-001",
+                            column_id="file_tag",
+                        ),
+                        self.verification("file_tag"),
+                    )
+
+                self.assertEqual(self.graphql_calls, [])
+                self.assertEqual(self.download_calls, [])
+                self.assertEqual(self.state_path.read_bytes(), before)
+
     def test_uncertain_delivery_is_persisted_and_never_retried_automatically(self):
         pipeline, calls, _ = self.create_uncertain_delivery()
 
