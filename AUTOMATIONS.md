@@ -135,6 +135,8 @@ python -m workflowos.cli check-monday-upload --item-id ID_ITEM_MONDAY
 
 Il caricamento vero e proprio richiede l'interruttore separato `WORKFLOWOS_MONDAY_UPLOAD_ENABLED=true`, in aggiunta al token e al profilo tenant. Come per l'email, la sola configurazione non arma la scrittura.
 
+Un caricamento respinto prima della trasmissione non è un caricamento incerto: la voce conserva lo stato precedente, resta pubblicabile e non consuma un eventuale ritentativo autorizzato. Soltanto un esito realmente ignoto passa a `upload_in_doubt` e richiede la riconciliazione con prova.
+
 Entrambi i comandi restano osservativi rispetto ai sistemi esterni: il primo legge soltanto i manifest, il secondo aggiorna lo stato dell'archivio. Il ritentativo del caricamento resta un'azione separata, autorizzata soltanto da una prova `confirmed-not-uploaded` e vincolata all'item e alla colonna registrati al momento dell'archiviazione.
 
 ## Stato di attivazione

@@ -19,12 +19,18 @@ import os
 import re
 import secrets
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
 from .automation import SUPPORTED_DOCUMENT_TYPES
-from .core import WorkflowError, _require_mapping, _require_string
+from .core import (
+    PublicationRefused,
+    WorkflowError,
+    _require_mapping,
+    _require_string,
+)
 from .monday_assets import MONDAY_API_URL, TENANT_ID_RE, _RejectApiRedirectHandler
 
 
@@ -180,24 +186,35 @@ class MondayGuardedUploader:
     def publish_pdf(
         self, item_id: str, column_id: str, filename: str, content: bytes
     ) -> dict[str, Any]:
-        """Upload one PDF after validating the target, the column and the bytes."""
+        """Upload one PDF after validating the target, the column and the bytes.
 
-        normalized_item_id = _require_numeric(item_id, "Monday item id")
-        normalized_column_id = _require_string(column_id, "Monday column id")
-        if normalized_column_id not in self._config.document_columns:
-            raise WorkflowError("Monday column is not configured for documents")
-        normalized_filename = _require_string(filename, "Monday upload filename")
-        if not SAFE_UPLOAD_FILENAME_RE.fullmatch(normalized_filename):
-            raise WorkflowError("Monday upload filename must be a simple PDF name")
-        if not isinstance(content, bytes) or not content.startswith(b"%PDF-"):
-            raise WorkflowError("Monday upload content must be a PDF")
-        if not content or len(content) > self._config.max_file_bytes:
-            raise WorkflowError("Monday upload exceeds the configured size limit")
+        Everything up to the transport call raises PublicationRefused: the PDF
+        provably never left this process, so the archive keeps its state
+        instead of demanding reconciliation evidence.  From the transport call
+        onwards the outcome is uncertain and ordinary errors are raised.
+        """
 
-        board_id = self._resolve_item_board(normalized_item_id)
+        with _refuse_before_transmission():
+            normalized_item_id = _require_numeric(item_id, "Monday item id")
+            normalized_column_id = _require_string(column_id, "Monday column id")
+            if normalized_column_id not in self._config.document_columns:
+                raise WorkflowError("Monday column is not configured for documents")
+            normalized_filename = _require_string(filename, "Monday upload filename")
+            if not SAFE_UPLOAD_FILENAME_RE.fullmatch(normalized_filename):
+                raise WorkflowError("Monday upload filename must be a simple PDF name")
+            if not isinstance(content, bytes) or not content.startswith(b"%PDF-"):
+                raise WorkflowError("Monday upload content must be a PDF")
+            if not content or len(content) > self._config.max_file_bytes:
+                raise WorkflowError("Monday upload exceeds the configured size limit")
+
+            # The binding query is a separate request that cannot carry a file,
+            # so a failure here is still a certain non-transmission.
+            board_id = self._resolve_item_board(normalized_item_id)
+            mutation = _add_file_mutation(normalized_item_id, normalized_column_id)
+
         content_sha256 = hashlib.sha256(content).hexdigest()
         response = self._file_uploader(
-            _add_file_mutation(normalized_item_id, normalized_column_id),
+            mutation,
             normalized_item_id,
             normalized_column_id,
             content,
@@ -280,6 +297,23 @@ class MondayGuardedUploader:
             method="POST",
         )
         return _open_json(request, self._config.file_api_url)
+
+
+@contextmanager
+def _refuse_before_transmission() -> Iterator[None]:
+    """Mark every failure inside the block as a certain non-transmission.
+
+    The block must contain no call able to send the payload, so that a
+    PublicationRefused can never escape from a request that already started
+    transferring the PDF.
+    """
+
+    try:
+        yield
+    except PublicationRefused:
+        raise
+    except Exception as exc:
+        raise PublicationRefused(str(exc)) from exc
 
 
 def _open_json(request: urllib.request.Request, expected_url: str) -> dict[str, Any]:

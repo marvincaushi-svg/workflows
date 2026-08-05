@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .core import SHA256_RE, WorkflowError, _require_string, _require_timestamp
+from .core import (
+    SHA256_RE,
+    PublicationRefused,
+    WorkflowError,
+    _require_string,
+    _require_timestamp,
+)
 from .state_store import lock_automation_state
 
 
@@ -249,8 +255,9 @@ class MeraviqaDocumentArchive:
         previous_status = entry.get("monday_status")
         if previous_status not in {"pending", "retry_authorized"}:
             raise WorkflowError("Monday archive upload is not safe to start")
+        previous_attempts = _require_upload_attempts(entry)
         entry["monday_status"] = "uploading"
-        entry["upload_attempts"] = int(entry.get("upload_attempts", 0)) + 1
+        entry["upload_attempts"] = previous_attempts + 1
         _atomic_write_json(manifest_path, manifest)
         try:
             confirmation = self._monday_publisher(
@@ -260,6 +267,22 @@ class MeraviqaDocumentArchive:
                 document.content,
             )
             monday_ref = _validate_monday_confirmation(confirmation, document)
+        except PublicationRefused as refusal:
+            # The adapter guarantees the PDF never left this process, so the
+            # entry keeps its previous state instead of demanding evidence.
+            entry["monday_status"] = previous_status
+            entry["monday_ref_sha256"] = None
+            entry["upload_attempts"] = previous_attempts
+            entry["refused_attempts"] = _require_refused_attempts(entry) + 1
+            entry["last_refusal_code"] = type(refusal).__name__
+            _atomic_write_json(manifest_path, manifest)
+            return _archive_result(
+                document,
+                archived_path.parent,
+                archived_path,
+                entry,
+                status=archive_status,
+            )
         except Exception as exc:
             entry["monday_status"] = "upload_in_doubt"
             entry["monday_ref_sha256"] = None
@@ -276,6 +299,7 @@ class MeraviqaDocumentArchive:
         entry["monday_status"] = "uploaded"
         entry["monday_ref_sha256"] = monday_ref
         entry.pop("last_error_code", None)
+        entry.pop("last_refusal_code", None)
         _atomic_write_json(manifest_path, manifest)
         return _archive_result(
             document,
@@ -400,8 +424,13 @@ def _inspected_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             ),
             "monday_status": status,
             "upload_attempts": _require_upload_attempts(entry),
+            "refused_attempts": _require_refused_attempts(entry),
             "action_required": MONDAY_ARCHIVE_ACTIONS[status],
         }
+        if entry.get("last_refusal_code") is not None:
+            snapshot["last_refusal_code"] = _require_string(
+                entry.get("last_refusal_code"), "manifest.document.last_refusal_code"
+            )
         if status == "uploaded":
             snapshot["monday_ref_sha256"] = _require_string(
                 entry.get("monday_ref_sha256"), "manifest.document.monday_ref_sha256"
@@ -411,9 +440,17 @@ def _inspected_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _require_upload_attempts(entry: dict[str, Any]) -> int:
-    attempts = entry.get("upload_attempts", 0)
+    return _require_attempt_count(entry, "upload_attempts")
+
+
+def _require_refused_attempts(entry: dict[str, Any]) -> int:
+    return _require_attempt_count(entry, "refused_attempts")
+
+
+def _require_attempt_count(entry: dict[str, Any], field: str) -> int:
+    attempts = entry.get(field, 0)
     if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 0:
-        raise WorkflowError("MERAVIQA archive upload attempts are invalid")
+        raise WorkflowError(f"MERAVIQA archive {field} are invalid")
     return attempts
 
 
@@ -610,6 +647,7 @@ def _archive_result(
         "content_sha256": document.content_sha256,
         "monday_status": entry.get("monday_status"),
         "upload_attempts": entry.get("upload_attempts", 0),
+        "refused_attempts": entry.get("refused_attempts", 0),
     }
 
 

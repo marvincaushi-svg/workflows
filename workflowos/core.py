@@ -31,6 +31,17 @@ class WorkflowError(ValueError):
     """Raised when process or evidence data violates the executable contract."""
 
 
+class PublicationRefused(WorkflowError):
+    """Raised only when no byte of the payload can have reached the provider.
+
+    A publisher adapter may raise this while it is still certain that nothing
+    was transmitted: a validation failure, a rejected binding, or a request
+    that cannot itself carry the payload.  Once the adapter starts handing the
+    payload to a transport it must raise an ordinary error instead, so an
+    uncertain outcome is never mistaken for a certain non-delivery.
+    """
+
+
 def load_document(path: str | Path) -> dict[str, Any]:
     """Load a JSON document.
 
