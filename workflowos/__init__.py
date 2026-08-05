@@ -27,6 +27,7 @@ from .hostpoint_email import (
     check_hostpoint_connection,
 )
 from .monday_assets import MondayReadOnlyCollector, MondayReadOnlyConfig
+from .monday_uploads import MondayGuardedUploader, MondayUploadConfig
 from .monday_pipeline import (
     DeliveryReconciliation,
     DurableMondayEmailPipeline,
@@ -62,8 +63,10 @@ __all__ = [
     "evaluate_technical_review",
     "handle_monday_file_event",
     "initialize_automation_state",
+    "MondayGuardedUploader",
     "MondayReadOnlyCollector",
     "MondayReadOnlyConfig",
+    "MondayUploadConfig",
     "MeraviqaDocumentArchive",
     "MondayArchiveReconciliation",
     "DurableMondayEmailPipeline",
