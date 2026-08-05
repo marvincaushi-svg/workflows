@@ -233,7 +233,7 @@
       "layer": {
         "capability": "operations_reporting",
         "provider": "workflowos",
-        "adapter": "workflowos.control_plane.build_health_report"
+        "adapter": "workflowos.control_plane.build_daily_operations_brief"
       },
       "trigger": {
         "type": "schedule",

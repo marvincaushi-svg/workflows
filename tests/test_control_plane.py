@@ -7,6 +7,7 @@ from pathlib import Path
 
 from workflowos.control_plane import (
     AutomationCatalogError,
+    build_daily_operations_brief,
     build_event_execution_plan,
     build_health_report,
     build_schedule_execution_plan,
@@ -443,3 +444,153 @@ class DocumentArchiveHealthTests(unittest.TestCase):
             self.health({"entries": "not-a-list"})
         with self.assertRaises(AutomationCatalogError):
             self.health(self.report(self.entry(refused_attempts=-1)))
+
+
+class DailyOperationsBriefTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+        cls.tenant_id = cls.catalog["tenant"]["id"]
+
+    # 07:00 local on a Tuesday: the brief's own schedule slot is due.
+    BRIEF_TIME = "2026-08-04T05:00:00Z"
+
+    def event(self, event_type, ref="a" * 64, collector_id="workflowos.event"):
+        return {
+            "collector_id": collector_id,
+            "event_type": event_type,
+            "case_id": "case-001",
+            "event_ref_sha256": ref,
+            "occurred_at": "2026-08-04T04:10:00Z",
+        }
+
+    def brief(self, **changes):
+        arguments = {"state": None, "at": self.BRIEF_TIME}
+        arguments.update(changes)
+        return build_daily_operations_brief(self.catalog, **arguments)
+
+    def archive_report(self, action_required, refused_attempts=0):
+        return {
+            "status": "ok",
+            "entry_count": 1,
+            "unresolved_count": 1,
+            "entries": [
+                {
+                    "tenant_id": self.tenant_id,
+                    "case_id": "case-042",
+                    "content_sha256": "a" * 64,
+                    "document_type": "tag_grid_connection_application",
+                    "monday_status": "upload_in_doubt",
+                    "upload_attempts": 1,
+                    "refused_attempts": refused_attempts,
+                    "action_required": action_required,
+                }
+            ],
+        }
+
+    def test_scheduled_work_due_now_is_ready(self):
+        brief = self.brief()
+
+        scheduled = [item for item in brief["ready"] if item["source"] == "schedule"]
+        self.assertIn(
+            "daily-operations-brief",
+            [item["automation_id"] for item in scheduled],
+        )
+        self.assertEqual(brief["status"], "healthy")
+        self.assertEqual(brief["totals"]["blocked"], 0)
+
+    def test_event_work_appears_with_its_case(self):
+        brief = self.brief(
+            events=[self.event("assignment_received", collector_id="email.assignment")]
+        )
+
+        event_work = [item for item in brief["ready"] if item["source"] == "event"]
+        self.assertEqual(event_work[0]["automation_id"], "assignment-intake")
+        self.assertEqual(event_work[0]["case_id"], "case-001")
+        self.assertEqual(event_work[0]["action_mode"], "internal_write")
+
+    def test_unmet_dependency_is_reported_as_blocked_not_ready(self):
+        brief = self.brief(
+            events=[self.event("technical_review_changes_required")]
+        )
+
+        self.assertEqual(brief["totals"]["blocked"], 1)
+        blocked = brief["blocked"][0]
+        self.assertEqual(blocked["automation_id"], "technical-work-plan")
+        self.assertEqual(blocked["missing_dependencies"], ["assignment-intake"])
+        self.assertNotIn(
+            "technical-work-plan",
+            [item["automation_id"] for item in brief["ready"]],
+        )
+
+    def test_retries_and_dead_letters_are_carried_over(self):
+        state = {
+            "retries": {
+                "retry-key": {
+                    "tenant_id": self.tenant_id,
+                    "automation_id": "assignment-intake",
+                    "case_id": "case-001",
+                    "attempts": 2,
+                    "retry_at": "2026-08-04T04:00:00Z",
+                }
+            },
+            "dead_letters": {
+                "dead-key": {
+                    "tenant_id": self.tenant_id,
+                    "automation_id": "technical-work-plan",
+                    "case_id": "case-002",
+                    "attempts": 3,
+                    "error_code": "provider_error",
+                    "failed_at": "2026-08-04T03:00:00Z",
+                }
+            },
+        }
+
+        brief = self.brief(state=state)
+
+        self.assertEqual(brief["totals"]["retrying"], 1)
+        self.assertEqual(brief["totals"]["failed"], 1)
+        self.assertEqual(brief["retrying"][0]["automation_id"], "assignment-intake")
+        self.assertEqual(brief["failed"][0]["error_code"], "provider_error")
+        self.assertEqual(brief["status"], "attention_required")
+
+    def test_documents_needing_a_person_are_counted(self):
+        brief = self.brief(
+            archive_report=self.archive_report("reconcile_monday_upload")
+        )
+
+        self.assertEqual(brief["totals"]["documents_awaiting_action"], 1)
+        self.assertEqual(brief["status"], "attention_required")
+        self.assertEqual(
+            brief["documents"]["awaiting_reconciliation"][0]["case_id"], "case-042"
+        )
+
+    def test_publication_backlog_alone_does_not_raise_the_brief(self):
+        brief = self.brief(
+            archive_report=self.archive_report("publish_monday_upload")
+        )
+
+        self.assertEqual(brief["totals"]["documents_awaiting_action"], 0)
+        self.assertEqual(brief["status"], "healthy")
+
+    def test_brief_never_mutates_the_runtime_state(self):
+        state = {
+            "completed_automations": [],
+            "retries": {},
+            "dead_letters": {},
+        }
+        snapshot = copy.deepcopy(state)
+
+        self.brief(
+            state=state,
+            events=[self.event("assignment_received", collector_id="email.assignment")],
+        )
+
+        self.assertEqual(state, snapshot)
+
+    def test_archive_report_of_another_tenant_is_rejected(self):
+        report = self.archive_report("reconcile_monday_upload")
+        report["entries"][0]["tenant_id"] = "tenant-other-001"
+
+        with self.assertRaisesRegex(AutomationCatalogError, "another tenant"):
+            self.brief(archive_report=report)
