@@ -169,59 +169,7 @@ class DurableMondayEmailPipeline:
     ) -> dict[str, Any]:
         """Resolve an uncertain delivery without sending or querying Monday."""
 
-        with lock_automation_state(state_path):
-            state = load_automation_state(state_path)
-            outbox = _require_mapping(
-                state.get("delivery_outbox"), "state.delivery_outbox"
-            )
-            entry = _require_mapping(
-                outbox.get(evidence.idempotency_key),
-                "state.delivery_outbox.reconciliation_entry",
-            )
-            if entry.get("status") not in {"sending", "delivery_in_doubt"}:
-                raise WorkflowError("Email delivery is not awaiting reconciliation")
-            reconciliation = _validate_reconciliation(evidence)
-
-            if evidence.outcome == "confirmed_not_sent":
-                _validated_persisted_request(entry, evidence.idempotency_key)
-                entry["status"] = "retry_authorized"
-                entry["reconciliation"] = reconciliation
-                result = {
-                    "status": "retry_authorized",
-                    "email_sent": False,
-                    "idempotency_key": evidence.idempotency_key,
-                }
-                state["last_result"] = result
-                save_automation_state(state_path, state)
-                return {"state": state, "result": result}
-
-            handoff_key = _require_string(entry.get("handoff"), "outbox.handoff")
-            handoffs = _require_mapping(state.get("handoffs"), "state.handoffs")
-            handoff = _require_mapping(
-                handoffs.get(handoff_key), f"state.handoffs.{handoff_key}"
-            )
-            email_delivery = _require_mapping(
-                handoff.get("email_delivery"), "handoff.email_delivery"
-            )
-            confirmation = {
-                "source": "email_adapter",
-                "delivery_status": "sent",
-                "recipient_email": _require_string(
-                    email_delivery.get("recipient_email"), "recipient_email"
-                ),
-                "message_ref_sha256": evidence.message_ref_sha256,
-            }
-            handoffs[handoff_key] = record_sb_email_delivery(handoff, confirmation)
-            _mark_entry_sent(entry, confirmation, reconciliation=reconciliation)
-            result = {
-                "status": "completed_reconciled",
-                "handoff": handoff_key,
-                "email_sent": True,
-                "idempotency_key": evidence.idempotency_key,
-            }
-            state["last_result"] = result
-            save_automation_state(state_path, state)
-            return {"state": state, "result": result}
+        return reconcile_delivery_state(state_path, evidence)
 
     def retry_authorized_delivery(
         self,
@@ -311,6 +259,110 @@ class DurableMondayEmailPipeline:
             raise WorkflowError("Monday collector and automation columns do not match")
 
 
+def inspect_delivery_outbox(state_path: str | Path) -> dict[str, Any]:
+    """Return a sanitized operational view without exposing email contents."""
+
+    with lock_automation_state(state_path):
+        state = load_automation_state(state_path)
+        outbox = _require_mapping(
+            state.get("delivery_outbox", {}), "state.delivery_outbox"
+        )
+        entries = []
+        for idempotency_key, raw_entry in sorted(outbox.items()):
+            key = _require_sha256(idempotency_key, "outbox.idempotency_key")
+            entry = _require_mapping(raw_entry, f"outbox.{key}")
+            status = _require_string(entry.get("status"), f"outbox.{key}.status")
+            if status not in UNRESOLVED_DELIVERY_STATES | {"sent"}:
+                raise WorkflowError("state.delivery_outbox contains an invalid status")
+            snapshot = {
+                "idempotency_key": key,
+                "status": status,
+                "handoff": _require_string(
+                    entry.get("handoff"), f"outbox.{key}.handoff"
+                ),
+                "request_sha256": _require_sha256(
+                    entry.get("request_sha256"), f"outbox.{key}.request_sha256"
+                ),
+                "action_required": _outbox_action(status),
+            }
+            if status == "sent":
+                snapshot["message_ref_sha256"] = _require_sha256(
+                    entry.get("message_ref_sha256"),
+                    f"outbox.{key}.message_ref_sha256",
+                )
+            entries.append(snapshot)
+        return {
+            "status": "ok",
+            "entry_count": len(entries),
+            "unresolved_count": sum(
+                entry["status"] in UNRESOLVED_DELIVERY_STATES
+                for entry in entries
+            ),
+            "entries": entries,
+        }
+
+
+def reconcile_delivery_state(
+    state_path: str | Path,
+    evidence: DeliveryReconciliation,
+) -> dict[str, Any]:
+    """Resolve uncertain delivery state without email or Monday adapters."""
+
+    with lock_automation_state(state_path):
+        state = load_automation_state(state_path)
+        outbox = _require_mapping(
+            state.get("delivery_outbox"), "state.delivery_outbox"
+        )
+        entry = _require_mapping(
+            outbox.get(evidence.idempotency_key),
+            "state.delivery_outbox.reconciliation_entry",
+        )
+        if entry.get("status") not in {"sending", "delivery_in_doubt"}:
+            raise WorkflowError("Email delivery is not awaiting reconciliation")
+        reconciliation = _validate_reconciliation(evidence)
+
+        if evidence.outcome == "confirmed_not_sent":
+            _validated_persisted_request(entry, evidence.idempotency_key)
+            entry["status"] = "retry_authorized"
+            entry["reconciliation"] = reconciliation
+            result = {
+                "status": "retry_authorized",
+                "email_sent": False,
+                "idempotency_key": evidence.idempotency_key,
+            }
+            state["last_result"] = result
+            save_automation_state(state_path, state)
+            return {"state": state, "result": result}
+
+        handoff_key = _require_string(entry.get("handoff"), "outbox.handoff")
+        handoffs = _require_mapping(state.get("handoffs"), "state.handoffs")
+        handoff = _require_mapping(
+            handoffs.get(handoff_key), f"state.handoffs.{handoff_key}"
+        )
+        email_delivery = _require_mapping(
+            handoff.get("email_delivery"), "handoff.email_delivery"
+        )
+        confirmation = {
+            "source": "email_adapter",
+            "delivery_status": "sent",
+            "recipient_email": _require_string(
+                email_delivery.get("recipient_email"), "recipient_email"
+            ),
+            "message_ref_sha256": evidence.message_ref_sha256,
+        }
+        handoffs[handoff_key] = record_sb_email_delivery(handoff, confirmation)
+        _mark_entry_sent(entry, confirmation, reconciliation=reconciliation)
+        result = {
+            "status": "completed_reconciled",
+            "handoff": handoff_key,
+            "email_sent": True,
+            "idempotency_key": evidence.idempotency_key,
+        }
+        state["last_result"] = result
+        save_automation_state(state_path, state)
+        return {"state": state, "result": result}
+
+
 def _find_unresolved_delivery(state: dict[str, Any]) -> str | None:
     outbox = state.get("delivery_outbox", {})
     if not isinstance(outbox, dict):
@@ -332,6 +384,14 @@ def _find_unresolved_delivery(state: dict[str, Any]) -> str | None:
     if len(unresolved) > 1:
         raise WorkflowError("Multiple unresolved email deliveries require reconciliation")
     return unresolved[0] if unresolved else None
+
+
+def _outbox_action(status: str) -> str:
+    if status in {"sending", "delivery_in_doubt"}:
+        return "reconcile_delivery"
+    if status == "retry_authorized":
+        return "perform_explicit_retry"
+    return "none"
 
 
 def _canonical_sha256(value: dict[str, Any]) -> str:
