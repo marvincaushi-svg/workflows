@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,13 +13,17 @@ from workflowos.document_archive import (
     MeraviqaDocumentArchive,
     MondayArchiveReconciliation,
     SbPdfDocument,
+    inspect_document_archive,
+    reconcile_archived_monday_upload,
 )
 
 
 PDF = b"%PDF-1.7\nSB document"
 
 
-class MeraviqaDocumentArchiveTests(unittest.TestCase):
+class ArchiveFixtures:
+    """Shared sanitized document and evidence builders."""
+
     def document(self, **changes):
         values = {
             "tenant_id": "tenant-test-001", "case_id": "case-001",
@@ -41,6 +47,8 @@ class MeraviqaDocumentArchiveTests(unittest.TestCase):
             evidence_ref_sha256="e" * 64,
         )
 
+
+class MeraviqaDocumentArchiveTests(ArchiveFixtures, unittest.TestCase):
     def test_archives_in_case_named_folder_then_uploads_to_monday(self):
         calls = []
 
@@ -250,6 +258,253 @@ class MeraviqaDocumentArchiveTests(unittest.TestCase):
             archive.archive(self.document())
             second = archive.archive(self.document(content=second_pdf, content_sha256=hashlib.sha256(second_pdf).hexdigest()))
             self.assertRegex(second["filename"], r"^TAG-[0-9a-f]{12}\.pdf$")
+
+    def test_reconciliation_cannot_be_bound_to_another_monday_item(self):
+        def uncertain(*args):
+            raise OSError("connection lost")
+
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            archive = MeraviqaDocumentArchive(directory, monday_publisher=uncertain)
+            archive.archive(document)
+            redirected = self.document(monday_item_id="9999")
+
+            with self.assertRaisesRegex(WorkflowError, "another item or column"):
+                archive.reconcile_monday(
+                    redirected, self.evidence(redirected, "confirmed_uploaded")
+                )
+
+    def test_authorized_retry_cannot_publish_to_another_monday_item(self):
+        attempts = []
+
+        def publisher(item_id, column_id, filename, content):
+            attempts.append((item_id, column_id))
+            raise OSError("connection lost")
+
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.document()
+            archive = MeraviqaDocumentArchive(directory, monday_publisher=publisher)
+            archive.archive(document)
+            archive.reconcile_monday(
+                document, self.evidence(document, "confirmed_not_uploaded")
+            )
+
+            with self.assertRaisesRegex(WorkflowError, "another item or column"):
+                archive.retry_authorized_monday(self.document(monday_item_id="9999"))
+            self.assertEqual(attempts, [("2001", "file_tag")])
+
+
+class DocumentArchiveInspectionTests(ArchiveFixtures, unittest.TestCase):
+    def uncertain_archive(self, directory):
+        """Archive one PDF whose Monday outcome stays unknown."""
+
+        def uncertain(*args):
+            raise OSError("connection lost after upload")
+
+        document = self.document()
+        MeraviqaDocumentArchive(directory, monday_publisher=uncertain).archive(document)
+        return document
+
+    def test_inspection_reports_action_without_exposing_identities(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.uncertain_archive(directory)
+            report = inspect_document_archive(directory)
+
+            self.assertEqual(report["entry_count"], 1)
+            self.assertEqual(report["unresolved_count"], 1)
+            entry = report["entries"][0]
+            self.assertEqual(entry["monday_status"], "upload_in_doubt")
+            self.assertEqual(entry["action_required"], "reconcile_monday_upload")
+            self.assertEqual(entry["content_sha256"], document.content_sha256)
+            self.assertEqual(entry["case_id"], "case-001")
+            serialized = json.dumps(report)
+            self.assertNotIn("Example Project", serialized)
+            self.assertNotIn("TAG.pdf", serialized)
+            self.assertNotIn("2001", serialized)
+
+    def test_inspection_never_writes_to_the_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.uncertain_archive(directory)
+            case = Path(directory) / "tenant-test-001" / "Example Project"
+            before = sorted(
+                (path.relative_to(directory).as_posix(), path.read_bytes())
+                for path in Path(directory).rglob("*")
+                if path.is_file()
+            )
+
+            inspect_document_archive(directory)
+
+            after = sorted(
+                (path.relative_to(directory).as_posix(), path.read_bytes())
+                for path in Path(directory).rglob("*")
+                if path.is_file()
+            )
+            self.assertEqual(after, before)
+            self.assertTrue((case / "TAG.pdf").is_file())
+
+    def test_inspection_is_scoped_to_the_requested_tenant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.uncertain_archive(directory)
+            other = self.document(tenant_id="tenant-test-002", case_id="case-002")
+            MeraviqaDocumentArchive(directory).archive(other)
+
+            everything = inspect_document_archive(directory)
+            scoped = inspect_document_archive(directory, tenant_id="tenant-test-002")
+
+            self.assertEqual(everything["entry_count"], 2)
+            self.assertEqual(scoped["entry_count"], 1)
+            self.assertEqual(scoped["entries"][0]["tenant_id"], "tenant-test-002")
+            self.assertEqual(
+                scoped["entries"][0]["action_required"], "publish_monday_upload"
+            )
+
+    def test_confirmed_non_upload_authorizes_retry_without_a_publisher(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.uncertain_archive(directory)
+            reconciled = reconcile_archived_monday_upload(
+                directory, self.evidence(document, "confirmed_not_uploaded")
+            )
+
+            self.assertEqual(reconciled["result"]["status"], "retry_authorized")
+            self.assertFalse(reconciled["result"]["monday_uploaded"])
+            report = inspect_document_archive(directory)
+            self.assertEqual(
+                report["entries"][0]["action_required"], "retry_monday_upload"
+            )
+
+    def test_confirmed_upload_closes_the_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.uncertain_archive(directory)
+            reconciled = reconcile_archived_monday_upload(
+                directory, self.evidence(document, "confirmed_uploaded")
+            )
+
+            self.assertEqual(reconciled["result"]["status"], "uploaded_reconciled")
+            self.assertTrue(reconciled["result"]["monday_uploaded"])
+            report = inspect_document_archive(directory)
+            self.assertEqual(report["unresolved_count"], 0)
+            self.assertEqual(report["entries"][0]["action_required"], "none")
+
+    def test_unknown_case_or_checksum_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.uncertain_archive(directory)
+            unknown_case = self.document(case_id="case-999")
+            with self.assertRaisesRegex(WorkflowError, "no folder for this tenant"):
+                reconcile_archived_monday_upload(
+                    directory, self.evidence(unknown_case, "confirmed_uploaded")
+                )
+
+            unknown_pdf = self.document(content_sha256="f" * 64)
+            with self.assertRaisesRegex(WorkflowError, "not registered"):
+                reconcile_archived_monday_upload(
+                    directory, self.evidence(unknown_pdf, "confirmed_uploaded")
+                )
+            self.assertEqual(
+                inspect_document_archive(directory)["entries"][0]["monday_status"],
+                "upload_in_doubt",
+            )
+
+    def test_resolved_entry_cannot_be_reconciled_again(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.uncertain_archive(directory)
+            reconcile_archived_monday_upload(
+                directory, self.evidence(document, "confirmed_uploaded")
+            )
+
+            with self.assertRaisesRegex(WorkflowError, "not awaiting reconciliation"):
+                reconcile_archived_monday_upload(
+                    directory, self.evidence(document, "confirmed_not_uploaded")
+                )
+
+
+class DocumentArchiveCliTests(ArchiveFixtures, unittest.TestCase):
+    def run_cli(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-m", "workflowos.cli", *arguments],
+            cwd=Path(__file__).resolve().parents[1],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    def archive_uncertain_pdf(self, directory):
+        def uncertain(*args):
+            raise OSError("connection lost after upload")
+
+        document = self.document()
+        MeraviqaDocumentArchive(directory, monday_publisher=uncertain).archive(document)
+        return document
+
+    def test_inspect_command_hides_case_folder_and_filename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.archive_uncertain_pdf(directory)
+            run = self.run_cli(
+                "inspect-document-archive", "--archive-root", directory
+            )
+
+            self.assertEqual(run.returncode, 0, run.stderr)
+            report = json.loads(run.stdout)
+            self.assertEqual(report["unresolved_count"], 1)
+            self.assertEqual(
+                report["entries"][0]["action_required"], "reconcile_monday_upload"
+            )
+            self.assertNotIn("Example Project", run.stdout)
+            self.assertNotIn("TAG.pdf", run.stdout)
+
+    def test_reconcile_command_authorizes_retry_without_touching_monday(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.archive_uncertain_pdf(directory)
+            run = self.run_cli(
+                "reconcile-monday-upload",
+                "--archive-root", directory,
+                "--tenant-id", document.tenant_id,
+                "--case-id", document.case_id,
+                "--content-sha256", document.content_sha256,
+                "--outcome", "confirmed-not-uploaded",
+                "--checked-at", "2026-08-05T09:00:00+02:00",
+                "--checked-by-ref", "operator-ref-001",
+                "--evidence-ref-sha256", "e" * 64,
+            )
+
+            self.assertEqual(run.returncode, 0, run.stderr)
+            result = json.loads(run.stdout)
+            self.assertEqual(result["status"], "retry_authorized")
+            self.assertFalse(result["monday_uploaded"])
+            manifest = json.loads(
+                (
+                    Path(directory)
+                    / "tenant-test-001"
+                    / "Example Project"
+                    / ".meraviqa-documents.json"
+                ).read_text(encoding="utf-8")
+            )
+            entry = manifest["documents"][document.content_sha256]
+            self.assertEqual(entry["monday_status"], "retry_authorized")
+            self.assertEqual(
+                entry["reconciliation"]["outcome"], "confirmed_not_uploaded"
+            )
+
+    def test_reconcile_command_rejects_unverifiable_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            document = self.archive_uncertain_pdf(directory)
+            run = self.run_cli(
+                "reconcile-monday-upload",
+                "--archive-root", directory,
+                "--tenant-id", document.tenant_id,
+                "--case-id", document.case_id,
+                "--content-sha256", document.content_sha256,
+                "--outcome", "confirmed-uploaded",
+                "--checked-at", "2026-08-05T09:00:00+02:00",
+                "--checked-by-ref", "operator-ref-001",
+                "--evidence-ref-sha256", "not-a-sha256",
+            )
+
+            self.assertEqual(run.returncode, 2)
+            self.assertIn("evidence must be SHA-256", run.stderr)
+            self.assertEqual(
+                inspect_document_archive(directory)["entries"][0]["monday_status"],
+                "upload_in_doubt",
+            )
 
 
 if __name__ == "__main__":

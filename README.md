@@ -62,6 +62,26 @@ python -m workflowos.cli reconcile-email-delivery \
 
 Per `confirmed-sent` è obbligatorio anche `--message-ref-sha256`. Il comando aggiorna lo stato ma non invia email: l'eventuale retry resta un'azione distinta, esplicita e protetta dall'adapter configurato.
 
+Lo stesso principio vale per l'archivio documentale. Un caricamento Monday rimasto incerto non viene mai ritentato da solo: l'ispezione elenca i PDF che attendono un esito leggendo unicamente i manifest, senza aprire i file, senza contattare Monday e senza mostrare cartella della commessa, nome del file o identificativi Monday.
+
+```bash
+python -m workflowos.cli inspect-document-archive \
+  --archive-root /percorso/archivio \
+  --tenant-id tenant-id-del-profilo
+
+python -m workflowos.cli reconcile-monday-upload \
+  --archive-root /percorso/archivio \
+  --tenant-id tenant-id-del-profilo \
+  --case-id case-042 \
+  --content-sha256 HASH_SHA256_DEL_PDF \
+  --outcome confirmed-not-uploaded \
+  --checked-at 2026-08-05T09:00:00+02:00 \
+  --checked-by-ref RIFERIMENTO_OPERATORE \
+  --evidence-ref-sha256 HASH_SHA256_PROVA
+```
+
+Ogni voce indica l'azione richiesta: `publish_monday_upload`, `reconcile_monday_upload`, `retry_monday_upload` oppure `none`. La riconciliazione ricostruisce il legame del documento dal manifest e dal PDF archiviato, quindi non può essere dirottata verso un altro item o un'altra colonna Monday; viene eseguita senza adapter di pubblicazione e non apre alcuna connessione. `confirmed-uploaded` chiude la voce, `confirmed-not-uploaded` autorizza un solo ritentativo esplicito, che resta un'azione distinta con l'adapter Monday configurato.
+
 L'adapter `workflowos.hostpoint_email` collega un account aziendale Hostpoint tramite SMTP STARTTLS. Account, mittente, nome aziendale e ruolo provengono dalla configurazione del tenant; il mittente deve coincidere con l'account autenticato. L'adapter verifica nuovamente l'hash SHA-256 di ogni allegato scaricato da Monday, blocca duplicati e invii oltre 20 MB e registra la consegna soltanto dopo l'accettazione del server SMTP. Il provider resta fissato a `asmtp.mail.hostpoint.ch:587`; la password viene letta dall'ambiente e non deve essere inserita nel repository. A&F è soltanto il profilo pilota predefinito.
 
 ### Configurazione Hostpoint locale
@@ -145,6 +165,7 @@ I test coprono:
 - interruttore esplicito per l'email reale e blocco delle duplicazioni.
 - adapter SMTP Hostpoint configurabile per tenant, con STARTTLS, identità autenticata coincidente, controllo hash, duplicati e limite allegati di 20 MB.
 - adapter Gmail configurabile per tenant, con mittente autenticato coincidente, firma aziendale e ruolo verificato.
+- ispezione dell'archivio in sola lettura e riconciliazione dei caricamenti Monday incerti, con legame documentale ricostruito dal manifest e nessun accesso a Monday.
 
 ## Confini delle responsabilità
 
