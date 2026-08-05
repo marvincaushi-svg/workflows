@@ -198,6 +198,22 @@ class _ApprovedAssetRedirectHandler(urllib.request.HTTPRedirectHandler):
         )
 
 
+class _RejectApiRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevent an authenticated Monday API request from changing destination."""
+
+    def redirect_request(
+        self,
+        request: urllib.request.Request,
+        file_pointer: Any,
+        code: int,
+        message: str,
+        headers: Mapping[str, str],
+        new_url: str,
+    ) -> None:
+        del request, file_pointer, code, message, headers, new_url
+        raise WorkflowError("Monday API redirects are not allowed")
+
+
 class MondayReadOnlyCollector:
     """Resolve one exact Monday file-column asset without any write operation."""
 
@@ -413,9 +429,14 @@ class MondayReadOnlyCollector:
             },
             method="POST",
         )
+        opener = urllib.request.build_opener(_RejectApiRedirectHandler())
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with opener.open(request, timeout=30) as response:
+                if response.geturl() != self._config.api_url:
+                    raise WorkflowError("Monday API response URL changed")
                 payload = json.load(response)
+        except WorkflowError:
+            raise
         except (OSError, ValueError) as exc:
             raise WorkflowError("Monday read-only API request failed") from exc
         if not isinstance(payload, dict) or payload.get("errors"):
