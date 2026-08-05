@@ -106,6 +106,29 @@ python -m workflowos.cli automation-health \
   --at 2026-08-04T07:00:00+02:00
 ```
 
+Ispezionare l'archivio documentale senza contattare Monday:
+
+```bash
+python -m workflowos.cli inspect-document-archive \
+  --archive-root /percorso/archivio
+```
+
+Registrare la prova che risolve un caricamento Monday incerto:
+
+```bash
+python -m workflowos.cli reconcile-monday-upload \
+  --archive-root /percorso/archivio \
+  --tenant-id tenant-id-del-profilo \
+  --case-id case-042 \
+  --content-sha256 HASH_SHA256_DEL_PDF \
+  --outcome confirmed-not-uploaded \
+  --checked-at 2026-08-05T09:00:00+02:00 \
+  --checked-by-ref RIFERIMENTO_OPERATORE \
+  --evidence-ref-sha256 HASH_SHA256_PROVA
+```
+
+Entrambi i comandi restano osservativi rispetto ai sistemi esterni: il primo legge soltanto i manifest, il secondo aggiorna lo stato dell'archivio. Il ritentativo del caricamento resta un'azione separata, autorizzata soltanto da una prova `confirmed-not-uploaded` e vincolata all'item e alla colonna registrati al momento dell'archiviazione.
+
 ## Stato di attivazione
 
 Il catalogo, la validazione, la pianificazione, le dipendenze, l'idempotenza, i retry, la dead letter, gli orari e le regole linguistiche sono implementati nel repository. Gli adapter esterni continuano a richiedere la rispettiva configurazione e autenticazione; dichiarare un'automazione come `enabled` significa renderla pianificabile, non concederle automaticamente accesso a posta, Monday, GitHub o Hostpoint.

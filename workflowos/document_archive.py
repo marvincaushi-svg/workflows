@@ -19,6 +19,7 @@ from .state_store import lock_automation_state
 
 MAX_ARCHIVE_PDF_BYTES = 10 * 1024 * 1024
 MANIFEST_SCHEMA_VERSION = "1.1"
+MANIFEST_FILENAME = ".meraviqa-documents.json"
 TENANT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,79}$")
 MONDAY_STATUSES = {
     "pending",
@@ -26,6 +27,19 @@ MONDAY_STATUSES = {
     "upload_in_doubt",
     "retry_authorized",
     "uploaded",
+}
+UNRESOLVED_MONDAY_STATUSES = {
+    "pending",
+    "uploading",
+    "upload_in_doubt",
+    "retry_authorized",
+}
+MONDAY_ARCHIVE_ACTIONS = {
+    "pending": "publish_monday_upload",
+    "uploading": "reconcile_monday_upload",
+    "upload_in_doubt": "reconcile_monday_upload",
+    "retry_authorized": "retry_monday_upload",
+    "uploaded": "none",
 }
 RECONCILIATION_OUTCOMES = {"confirmed_uploaded", "confirmed_not_uploaded"}
 MondayPdfPublisher = Callable[[str, str, str, bytes], dict[str, Any]]
@@ -75,7 +89,7 @@ class MeraviqaDocumentArchive:
         validated = _validate_document(document, self._max_pdf_bytes)
         case_directory = self._case_directory(validated)
         case_directory.mkdir(parents=True, exist_ok=True)
-        manifest_path = case_directory / ".meraviqa-documents.json"
+        manifest_path = case_directory / MANIFEST_FILENAME
 
         with lock_automation_state(manifest_path):
             manifest = _load_manifest(
@@ -154,12 +168,13 @@ class MeraviqaDocumentArchive:
         validated = _validate_document(document, self._max_pdf_bytes)
         reconciliation = _validate_reconciliation(evidence, validated)
         case_directory = self._case_directory(validated)
-        manifest_path = case_directory / ".meraviqa-documents.json"
+        manifest_path = case_directory / MANIFEST_FILENAME
         with lock_automation_state(manifest_path):
             manifest = _load_manifest(
                 manifest_path, validated.tenant_id, validated.case_id
             )
             entry = _require_archive_entry(manifest, validated.content_sha256)
+            _validate_entry_binding(entry, validated)
             archived_path = _validated_archived_path(
                 case_directory, entry, validated.content_sha256
             )
@@ -193,12 +208,13 @@ class MeraviqaDocumentArchive:
             raise WorkflowError("Monday retry requires a publisher adapter")
         validated = _validate_document(document, self._max_pdf_bytes)
         case_directory = self._case_directory(validated)
-        manifest_path = case_directory / ".meraviqa-documents.json"
+        manifest_path = case_directory / MANIFEST_FILENAME
         with lock_automation_state(manifest_path):
             manifest = _load_manifest(
                 manifest_path, validated.tenant_id, validated.case_id
             )
             entry = _require_archive_entry(manifest, validated.content_sha256)
+            _validate_entry_binding(entry, validated)
             archived_path = _validated_archived_path(
                 case_directory, entry, validated.content_sha256
             )
@@ -270,6 +286,180 @@ class MeraviqaDocumentArchive:
         )
 
 
+def inspect_document_archive(
+    root: str | Path, *, tenant_id: str | None = None
+) -> dict[str, Any]:
+    """Report archived PDFs awaiting a Monday outcome without exposing identities.
+
+    The scan only reads manifests: it never opens a PDF, never contacts Monday
+    and never reports folder names, file names or Monday identifiers.
+    """
+
+    root_path = Path(root)
+    entries: list[dict[str, Any]] = []
+    for tenant_directory in _archive_tenant_directories(root_path, tenant_id):
+        for case_directory in _archive_case_directories(tenant_directory):
+            manifest_path = case_directory / MANIFEST_FILENAME
+            if not manifest_path.is_file():
+                continue
+            manifest = _parse_manifest(manifest_path)
+            if manifest["tenant_id"] != tenant_directory.name:
+                raise WorkflowError("MERAVIQA archive manifest tenant does not match its folder")
+            entries.extend(_inspected_entries(manifest))
+    entries.sort(key=lambda entry: (entry["case_id"], entry["content_sha256"]))
+    return {
+        "status": "ok",
+        "entry_count": len(entries),
+        "unresolved_count": sum(
+            entry["monday_status"] in UNRESOLVED_MONDAY_STATUSES for entry in entries
+        ),
+        "entries": entries,
+    }
+
+
+def reconcile_archived_monday_upload(
+    root: str | Path,
+    evidence: MondayArchiveReconciliation,
+    *,
+    max_pdf_bytes: int = MAX_ARCHIVE_PDF_BYTES,
+) -> dict[str, Any]:
+    """Resolve an uncertain archive upload from persisted evidence only.
+
+    The document binding is rebuilt from the manifest and the archived PDF, so
+    the caller cannot redirect the outcome to another Monday item or column.
+    The archive is constructed without a publisher: no Monday call is possible.
+    """
+
+    root_path = Path(root)
+    tenant_id = _require_string(evidence.tenant_id, "reconciliation.tenant_id")
+    if not TENANT_ID_RE.fullmatch(tenant_id):
+        raise WorkflowError("Archive tenant id is invalid")
+    case_id = _require_string(evidence.case_id, "reconciliation.case_id")
+    if not SHA256_RE.fullmatch(evidence.content_sha256):
+        raise WorkflowError("Monday reconciliation checksum must be SHA-256")
+
+    case_directory = _find_case_directory(root_path, tenant_id, case_id)
+    manifest = _parse_manifest(case_directory / MANIFEST_FILENAME)
+    document = _rebuild_archived_document(
+        case_directory, manifest, evidence.content_sha256
+    )
+    archive = MeraviqaDocumentArchive(root_path, max_pdf_bytes=max_pdf_bytes)
+    archived = archive.reconcile_monday(document, evidence)
+    return {
+        "archive": archived,
+        "result": {
+            "status": archived["reconciliation_status"],
+            "tenant_id": archived["tenant_id"],
+            "case_id": archived["case_id"],
+            "content_sha256": archived["content_sha256"],
+            "document_type": document.document_type,
+            "monday_status": archived["monday_status"],
+            "upload_attempts": archived["upload_attempts"],
+            "monday_uploaded": archived["monday_status"] == "uploaded",
+        },
+    }
+
+
+def _archive_tenant_directories(
+    root: Path, tenant_id: str | None
+) -> list[Path]:
+    if not _is_real_directory(root):
+        raise WorkflowError("MERAVIQA archive root is not a directory")
+    if tenant_id is not None:
+        if not TENANT_ID_RE.fullmatch(tenant_id):
+            raise WorkflowError("Archive tenant id is invalid")
+        candidate = root / tenant_id
+        return [candidate] if _is_real_directory(candidate) else []
+    return sorted(
+        child
+        for child in root.iterdir()
+        if _is_real_directory(child) and TENANT_ID_RE.fullmatch(child.name)
+    )
+
+
+def _archive_case_directories(tenant_directory: Path) -> list[Path]:
+    return sorted(
+        child for child in tenant_directory.iterdir() if _is_real_directory(child)
+    )
+
+
+def _is_real_directory(path: Path) -> bool:
+    return path.is_dir() and not path.is_symlink()
+
+
+def _inspected_entries(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    inspected = []
+    for content_sha256, entry in sorted(manifest["documents"].items()):
+        status = entry["monday_status"]
+        snapshot = {
+            "tenant_id": manifest["tenant_id"],
+            "case_id": manifest["case_id"],
+            "content_sha256": content_sha256,
+            "document_type": _require_string(
+                entry.get("document_type"), "manifest.document.document_type"
+            ),
+            "monday_status": status,
+            "upload_attempts": _require_upload_attempts(entry),
+            "action_required": MONDAY_ARCHIVE_ACTIONS[status],
+        }
+        if status == "uploaded":
+            snapshot["monday_ref_sha256"] = _require_string(
+                entry.get("monday_ref_sha256"), "manifest.document.monday_ref_sha256"
+            )
+        inspected.append(snapshot)
+    return inspected
+
+
+def _require_upload_attempts(entry: dict[str, Any]) -> int:
+    attempts = entry.get("upload_attempts", 0)
+    if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 0:
+        raise WorkflowError("MERAVIQA archive upload attempts are invalid")
+    return attempts
+
+
+def _find_case_directory(root: Path, tenant_id: str, case_id: str) -> Path:
+    tenant_directory = root / tenant_id
+    if not _is_real_directory(tenant_directory):
+        raise WorkflowError("MERAVIQA archive has no folder for this tenant")
+    matches = []
+    for case_directory in _archive_case_directories(tenant_directory):
+        manifest_path = case_directory / MANIFEST_FILENAME
+        if not manifest_path.is_file():
+            continue
+        manifest = _parse_manifest(manifest_path)
+        if manifest["tenant_id"] == tenant_id and manifest["case_id"] == case_id:
+            matches.append(case_directory)
+    if not matches:
+        raise WorkflowError("MERAVIQA archive has no folder for this tenant and case")
+    if len(matches) > 1:
+        raise WorkflowError("MERAVIQA archive has more than one folder for this case")
+    return matches[0]
+
+
+def _rebuild_archived_document(
+    case_directory: Path, manifest: dict[str, Any], content_sha256: str
+) -> SbPdfDocument:
+    entry = _require_archive_entry(manifest, content_sha256)
+    archived_path = _validated_archived_path(case_directory, entry, content_sha256)
+    return SbPdfDocument(
+        tenant_id=manifest["tenant_id"],
+        case_id=manifest["case_id"],
+        case_name=case_directory.name,
+        monday_item_id=_require_string(
+            entry.get("monday_item_id"), "manifest.document.monday_item_id"
+        ),
+        monday_column_id=_require_string(
+            entry.get("monday_column_id"), "manifest.document.monday_column_id"
+        ),
+        document_type=_require_string(
+            entry.get("document_type"), "manifest.document.document_type"
+        ),
+        filename=archived_path.name,
+        content=archived_path.read_bytes(),
+        content_sha256=content_sha256,
+    )
+
+
 def _validate_document(document: SbPdfDocument, max_bytes: int) -> SbPdfDocument:
     if not TENANT_ID_RE.fullmatch(document.tenant_id):
         raise WorkflowError("Document tenant id is invalid")
@@ -316,6 +506,15 @@ def _load_manifest(path: Path, tenant_id: str, case_id: str) -> dict[str, Any]:
             "case_id": case_id,
             "documents": {},
         }
+    manifest = _parse_manifest(path)
+    if manifest.get("tenant_id") != tenant_id or manifest.get("case_id") != case_id:
+        raise WorkflowError("MERAVIQA archive folder belongs to another case")
+    return manifest
+
+
+def _parse_manifest(path: Path) -> dict[str, Any]:
+    """Read and validate a manifest without binding it to an expected case."""
+
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -331,8 +530,8 @@ def _load_manifest(path: Path, tenant_id: str, case_id: str) -> dict[str, Any]:
         )
         if expected != _manifest_payload_sha256(manifest):
             raise WorkflowError("MERAVIQA archive manifest checksum does not match")
-    if manifest.get("tenant_id") != tenant_id or manifest.get("case_id") != case_id:
-        raise WorkflowError("MERAVIQA archive folder belongs to another case")
+    _require_string(manifest.get("tenant_id"), "manifest.tenant_id")
+    _require_string(manifest.get("case_id"), "manifest.case_id")
     if not isinstance(manifest.get("documents"), dict):
         raise WorkflowError("MERAVIQA archive manifest documents are invalid")
     if schema_version == "1.0":
@@ -349,6 +548,26 @@ def _load_manifest(path: Path, tenant_id: str, case_id: str) -> dict[str, Any]:
         if status not in MONDAY_STATUSES:
             raise WorkflowError("MERAVIQA archive Monday status is invalid")
     return manifest
+
+
+def _validate_entry_binding(
+    entry: dict[str, Any], document: SbPdfDocument
+) -> None:
+    """Reject evidence or a retry aimed at a different Monday target."""
+
+    item_id = _require_string(
+        entry.get("monday_item_id"), "manifest.document.monday_item_id"
+    )
+    column_id = _require_string(
+        entry.get("monday_column_id"), "manifest.document.monday_column_id"
+    )
+    document_type = _require_string(
+        entry.get("document_type"), "manifest.document.document_type"
+    )
+    if item_id != document.monday_item_id or column_id != document.monday_column_id:
+        raise WorkflowError("Monday archive entry is bound to another item or column")
+    if document_type != document.document_type:
+        raise WorkflowError("Monday archive entry is bound to another document type")
 
 
 def _require_archive_entry(

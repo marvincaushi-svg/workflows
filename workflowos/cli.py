@@ -17,6 +17,11 @@ from .control_plane import (
     validate_automation_catalog,
 )
 from .core import WorkflowError, build_case_from_email, evaluate_case, load_document
+from .document_archive import (
+    MondayArchiveReconciliation,
+    inspect_document_archive,
+    reconcile_archived_monday_upload,
+)
 from .hostpoint_email import (
     HostpointSmtpConfig,
     check_hostpoint_connection,
@@ -169,6 +174,48 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     reconcile_parser.add_argument("--evidence-ref-sha256", required=True)
     reconcile_parser.add_argument("--message-ref-sha256")
+
+    archive_parser = subparsers.add_parser(
+        "inspect-document-archive",
+        help="Inspect archived PDFs awaiting a Monday outcome",
+    )
+    archive_parser.add_argument(
+        "--archive-root", required=True, help="MERAVIQA archive root path"
+    )
+    archive_parser.add_argument(
+        "--tenant-id", help="Restrict the report to one tenant archive"
+    )
+
+    archive_reconcile_parser = subparsers.add_parser(
+        "reconcile-monday-upload",
+        help="Record verified evidence for an uncertain Monday archive upload",
+    )
+    archive_reconcile_parser.add_argument(
+        "--archive-root", required=True, help="MERAVIQA archive root path"
+    )
+    archive_reconcile_parser.add_argument("--tenant-id", required=True)
+    archive_reconcile_parser.add_argument(
+        "--case-id", required=True, help="Non-sensitive case identifier"
+    )
+    archive_reconcile_parser.add_argument(
+        "--content-sha256", required=True, help="SHA-256 of the archived PDF"
+    )
+    archive_reconcile_parser.add_argument(
+        "--outcome",
+        required=True,
+        choices=("confirmed-uploaded", "confirmed-not-uploaded"),
+    )
+    archive_reconcile_parser.add_argument(
+        "--checked-at",
+        required=True,
+        help="ISO-8601 evidence timestamp with timezone",
+    )
+    archive_reconcile_parser.add_argument(
+        "--checked-by-ref",
+        required=True,
+        help="Non-sensitive operator or procedure reference",
+    )
+    archive_reconcile_parser.add_argument("--evidence-ref-sha256", required=True)
     return parser
 
 
@@ -272,6 +319,24 @@ def main(argv: Sequence[str] | None = None) -> int:
                     checked_by_ref=args.checked_by_ref,
                     evidence_ref_sha256=args.evidence_ref_sha256,
                     message_ref_sha256=args.message_ref_sha256,
+                ),
+            )
+            result = reconciled["result"]
+        elif args.command == "inspect-document-archive":
+            result = inspect_document_archive(
+                args.archive_root, tenant_id=args.tenant_id
+            )
+        elif args.command == "reconcile-monday-upload":
+            reconciled = reconcile_archived_monday_upload(
+                args.archive_root,
+                MondayArchiveReconciliation(
+                    tenant_id=args.tenant_id,
+                    case_id=args.case_id,
+                    content_sha256=args.content_sha256,
+                    outcome=args.outcome.replace("-", "_"),
+                    checked_at=args.checked_at,
+                    checked_by_ref=args.checked_by_ref,
+                    evidence_ref_sha256=args.evidence_ref_sha256,
                 ),
             )
             result = reconciled["result"]

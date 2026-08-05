@@ -17,6 +17,8 @@ from .document_archive import (
     MeraviqaDocumentArchive,
     MondayArchiveReconciliation,
     SbPdfDocument,
+    inspect_document_archive,
+    reconcile_archived_monday_upload,
 )
 from .hostpoint_email import (
     EmailAttachment,
@@ -68,6 +70,8 @@ __all__ = [
     "DeliveryReconciliation",
     "MondayFileChange",
     "inspect_delivery_outbox",
+    "inspect_document_archive",
+    "reconcile_archived_monday_upload",
     "reconcile_delivery_state",
     "SbPdfDocument",
     "load_document",
