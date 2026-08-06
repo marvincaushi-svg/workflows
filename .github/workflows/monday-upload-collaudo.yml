@@ -51,6 +51,63 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check the repository configuration first
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          # The token is a secret; the other three are repository variables.
+          # A missing variable used to surface as an opaque JSON parse error.
+          required = {
+              "MONDAY_API_TOKEN": "secret",
+              "WORKFLOWOS_TENANT_ID": "variable",
+              "WORKFLOWOS_MONDAY_BOARD_ID": "variable",
+              "WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS": "variable",
+          }
+          missing = [
+              f"  - {name}  ({kind})"
+              for name, kind in required.items()
+              if not os.environ.get(name, "").strip()
+          ]
+          if missing:
+              print(
+                  "Configurazione incompleta. Non impostati:\n"
+                  + "\n".join(missing)
+                  + "\n\nI tre WORKFLOWOS_* sono repository VARIABLES, non secrets:"
+                  "\n  Settings -> Secrets and variables -> Actions -> scheda Variables."
+                  "\nUna variabile messa fra i secrets non viene letta da questo workflow.",
+                  file=sys.stderr,
+              )
+              raise SystemExit(1)
+
+          try:
+              columns = json.loads(os.environ["WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS"])
+          except json.JSONDecodeError as exc:
+              raise SystemExit(
+                  f"WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS non e' JSON valido: {exc}"
+              )
+          if not isinstance(columns, dict):
+              raise SystemExit(
+                  "WORKFLOWOS_MONDAY_DOCUMENT_COLUMNS deve essere un oggetto JSON"
+              )
+
+          column_id = os.environ["MONDAY_COLUMN_ID"].strip()
+          if column_id not in columns:
+              raise SystemExit(
+                  f"La colonna '{column_id}' non e' fra quelle configurate.\n"
+                  "Colonne disponibili: " + ", ".join(sorted(columns))
+                  + "\nL'id della colonna va scritto per intero, prefisso compreso."
+              )
+
+          item_id = os.environ["MONDAY_ITEM_ID"].strip()
+          if not item_id.isdigit():
+              raise SystemExit(f"L'item id '{item_id}' non e' numerico.")
+
+          print(f"Configurazione completa. Colonna '{column_id}' riconosciuta.")
+          PY
+
       - name: Run the unit tests first
         run: python -m unittest discover -s tests
 
